@@ -1,0 +1,3829 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cờ Vua Cao Cấp • Elite Chess</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <!-- Firebase v10 Compat -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <!-- chess.js for rules and move validation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&amp;family=Inter:wght@300;400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap');
+    
+    :root {
+      --gold: #d4af37;
+      --gold-dark: #b8972e;
+    }
+    
+    .luxury-font { font-family: 'Playfair Display', Georgia, serif; }
+    .modern-font { font-family: 'Space Grotesk', 'Inter', system_ui, sans-serif; }
+    
+    .chess-board {
+      box-shadow: 0 25px 60px -15px rgb(0 0 0 / 0.5), 
+                  0 10px 10px -5px rgb(0 0 0 / 0.4),
+                  inset 0 0 0 1px rgba(255,255,255,0.1),
+                  inset 0 0 80px rgba(0,0,0,0.3);
+      border: 12px solid #2c2522;
+      border-radius: 12px;
+      background: #1a1614;
+      position: relative;
+    }
+    
+    .chess-board::before {
+      content: '';
+      position: absolute;
+      inset: -1px;
+      border-radius: 12px;
+      box-shadow: inset 0 0 0 1px #d4af37,
+                  inset 0 4px 12px rgba(255,255,255,0.06);
+      pointer-events: none;
+      z-index: 1;
+    }
+    
+    .square {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      user-select: none;
+      transition: filter 0.1s ease;
+    }
+    
+    .square.light { background: #e8d9b8; }
+    .square.dark { background: #5c4633; }
+    
+    .square.light.alt { background: #d4c4a3; }
+    .square.dark.alt { background: #4a3728; }
+    
+    .square:hover { filter: brightness(1.08); }
+    .square.selected { 
+      box-shadow: inset 0 0 0 4px #d4af37;
+      z-index: 10;
+    }
+    .square.possible-move::after {
+      content: '';
+      position: absolute;
+      width: 28%;
+      height: 28%;
+      background: rgba(212, 175, 55, 0.45);
+      border-radius: 9999px;
+      z-index: 5;
+    }
+    .square.possible-capture::after {
+      content: '';
+      position: absolute;
+      inset: 8%;
+      border: 4px solid rgba(212, 175, 55, 0.75);
+      border-radius: 9999px;
+      z-index: 5;
+    }
+    .square.last-move { 
+      background: rgba(212, 175, 55, 0.28) !important; 
+    }
+    .square.in-check { 
+      box-shadow: inset 0 0 0 5px #ef4444;
+      animation: check-pulse 1.2s infinite ease-in-out;
+    }
+    
+    @keyframes check-pulse {
+      0%, 100% { box-shadow: inset 0 0 0 5px #ef4444; }
+      50% { box-shadow: inset 0 0 0 8px #b91c1c; }
+    }
+    
+    .chess-piece {
+      width: 82%;
+      height: 82%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      filter: drop-shadow(0 8px 6px rgb(0 0 0 / 0.35)) 
+              drop-shadow(0 4px 3px rgb(0 0 0 / 0.3));
+      transition: transform 0.15s cubic-bezier(0.2, 0, 0, 1);
+      user-select: none;
+      pointer-events: none;
+    }
+    
+    .chess-piece.dragging {
+      transform: scale(1.12) translateY(-6px);
+      filter: drop-shadow(0 20px 13px rgb(0 0 0 / 0.45)) 
+              drop-shadow(0 8px 5px rgb(0 0 0 / 0.35));
+      z-index: 50;
+    }
+    
+    .piece-container {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+    }
+    
+    .premium-shadow {
+      box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.3),
+                  0 4px 6px -4px rgb(0 0 0 / 0.3);
+    }
+    
+    .luxury-card {
+      background: linear-gradient(145deg, #1f2937, #111827);
+      border: 1px solid #374151;
+      transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
+                  box-shadow 0.2s cubic-bezier(0.4, 0.0, 0.2, 1),
+                  border-color 0.2s;
+    }
+    
+    .luxury-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+      border-color: #4b5563;
+    }
+    
+    .gold-text {
+      background: linear-gradient(90deg, #d4af37, #f0d78c, #d4af37);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-size: 200% 100%;
+      animation: gold-shimmer 3s linear infinite;
+    }
+    
+    @keyframes gold-shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    
+    .section-header {
+      font-family: 'Playfair Display', Georgia, serif;
+      letter-spacing: -0.025em;
+    }
+    
+    .elegant-modal {
+      animation: modal-enter 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+    }
+    
+    .nav-active {
+      background: rgba(212, 175, 55, 0.1);
+      color: #d4af37;
+      border-bottom: 2px solid #d4af37;
+    }
+    
+    .chess-square-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: #6b5c4a;
+      text-shadow: 0 1px 0 rgba(255,255,255,0.5);
+    }
+    
+    .move-list {
+      scrollbar-width: thin;
+      scrollbar-color: #4b5563 #1f2937;
+    }
+    
+    .message-bubble {
+      max-width: 75%;
+      padding: 10px 14px;
+      border-radius: 18px;
+      font-size: 0.925rem;
+      line-height: 1.35;
+    }
+    
+    .message-bubble.self {
+      background: linear-gradient(135deg, #d4af37, #b8972e);
+      color: #1a1614;
+      border-bottom-right-radius: 5px;
+    }
+    
+    .message-bubble.opponent {
+      background: #374151;
+      color: #e5e7eb;
+      border-bottom-left-radius: 5px;
+    }
+    
+    .player-card {
+      background: linear-gradient(to bottom, #1f2937, #111827);
+      border: 1px solid #374151;
+    }
+    
+    .timer {
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum";
+      letter-spacing: 0.5px;
+    }
+    
+    .rating-change {
+      font-weight: 700;
+      padding: 1px 9px;
+      border-radius: 9999px;
+      font-size: 0.875rem;
+    }
+    
+    .rating-up {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+    }
+    
+    .rating-down {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+    }
+    
+    .elo-badge {
+      background: linear-gradient(135deg, #1f2937, #111827);
+      border: 1px solid #4b5563;
+      box-shadow: 0 0 0 1px #374151 inset;
+    }
+    
+    .board-theme-marble .square.light { background: #e8e4d9; }
+    .board-theme-marble .square.dark { background: #5a5d6b; }
+    
+    .board-theme-midnight .square.light { background: #3f4a5f; }
+    .board-theme-midnight .square.dark { background: #1e2937; }
+    
+    .board-theme-emerald .square.light { background: #c8d9c3; }
+    .board-theme-emerald .square.dark { background: #2f4a3a; }
+    
+    .board-theme-royal .square.light { background: #f4e9c9; }
+    .board-theme-royal .square.dark { background: #5c4033; }
+    
+    .piece-glow {
+      filter: drop-shadow(0 0 3px rgba(212, 175, 55, 0.3));
+    }
+    
+    .replay-slider {
+      accent-color: #d4af37;
+    }
+    
+    .stat-card {
+      background: #111827;
+      border: 1px solid #374151;
+    }
+    
+    .top-player {
+      background: linear-gradient(90deg, #1f2937 0%, #111827 100%);
+    }
+    
+    .top-player.gold {
+      border-color: #d4af37;
+      background: linear-gradient(90deg, #1f2937 0%, #1a2535 100%);
+    }
+  </style>
+</head>
+<body class="bg-[#0a0c10] text-slate-200 modern-font">
+  <!-- Background subtle luxury texture -->
+  <div class="fixed inset-0 bg-[radial-gradient(#1f2937_0.8px,transparent_1px)] bg-[length:5px_5px] pointer-events-none z-0"></div>
+  
+  <!-- HEADER / NAVBAR -->
+  <nav class="relative z-50 border-b border-slate-800 bg-[#0a0c10]/95 backdrop-blur-xl">
+    <div class="max-w-screen-2xl mx-auto">
+      <div class="px-8 h-20 flex items-center justify-between">
+        <!-- Logo -->
+        <div class="flex items-center gap-x-3">
+          <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-300 via-[#d4af37] to-amber-400 flex items-center justify-center shadow-inner">
+            <i class="fa-solid fa-chess-king text-[#0a0c10] text-3xl"></i>
+          </div>
+          <div>
+            <div class="luxury-font text-3xl tracking-tighter font-bold">Cờ Vua Cao Cấp</div>
+            <div class="text-[10px] text-amber-400/70 -mt-1 tracking-[3px]">ELITE • 4K</div>
+          </div>
+        </div>
+ 
+        <!-- Right side: Profile + Actions -->
+        <div class="flex items-center gap-x-4" id="nav-profile-area">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+  </nav>
+ 
+  <!-- MAIN CONTENT -->
+  <div class="max-w-screen-2xl mx-auto px-6 pt-8 pb-24 relative z-10">
+    
+    <!-- MENU VIEW -->
+    <div id="view-menu">
+      <!-- Hero -->
+      <div class="text-center mb-10">
+        <div class="inline-flex items-center gap-x-2 px-4 py-1 rounded-full bg-white/5 border border-white/10 text-xs tracking-widest text-amber-300 mb-4">
+          <div class="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></div>
+          TRẢI NGHIỆM CỜ VUA 4K
+        </div>
+        <h1 class="luxury-font text-7xl font-bold tracking-tighter">Vương Quốc Cờ Vua</h1>
+        <p class="mt-3 text-xl text-slate-400 max-w-md mx-auto">Thiết kế đỉnh cao. Đấu trí thật sự. Lịch sử vĩnh cửu.</p>
+      </div>
+ 
+      <!-- User Quick Stats -->
+      <div class="flex justify-center mb-10" id="menu-user-stats">
+        <!-- JS populated -->
+      </div>
+ 
+      <!-- Game Modes -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-[1200px] mx-auto">
+        
+        <!-- Mode 1: Vs Computer -->
+        <div class="luxury-card rounded-3xl p-7 border border-slate-700 group">
+          <div class="flex items-start justify-between">
+            <div>
+              <div class="w-12 h-12 rounded-2xl bg-emerald-900/40 flex items-center justify-center mb-5 ring-1 ring-emerald-800/50">
+                <i class="fa-solid fa-robot text-emerald-400 text-3xl"></i>
+              </div>
+              <h3 class="text-2xl font-semibold tracking-tight">Chơi với Máy</h3>
+              <p class="text-slate-400 mt-1 text-sm">Stockfish 17 • 4 cấp độ</p>
+            </div>
+            <div class="px-3 py-1 text-xs rounded-full bg-emerald-900/30 text-emerald-300 font-medium self-start">AI</div>
+          </div>
+          
+          <div class="mt-6 space-y-2">
+            <div onclick="startAIGame(1)" class="cursor-pointer flex items-center justify-between px-4 py-[13px] rounded-2xl hover:bg-white/5 border border-transparent hover:border-emerald-900/60 transition-colors group/item">
+              <div class="flex items-center gap-x-3">
+                <span class="font-medium">Dễ</span>
+                <span class="text-xs text-emerald-400">(~900 ELO)</span>
+              </div>
+              <i class="fa-solid fa-play text-emerald-400 opacity-70 group-hover/item:opacity-100"></i>
+            </div>
+            <div onclick="startAIGame(2)" class="cursor-pointer flex items-center justify-between px-4 py-[13px] rounded-2xl hover:bg-white/5 border border-transparent hover:border-emerald-900/60 transition-colors group/item">
+              <div class="flex items-center gap-x-3">
+                <span class="font-medium">Trung bình</span>
+                <span class="text-xs text-emerald-400">(~1200 ELO)</span>
+              </div>
+              <i class="fa-solid fa-play text-emerald-400 opacity-70 group-hover/item:opacity-100"></i>
+            </div>
+            <div onclick="startAIGame(3)" class="cursor-pointer flex items-center justify-between px-4 py-[13px] rounded-2xl hover:bg-white/5 border border-transparent hover:border-emerald-900/60 transition-colors group/item">
+              <div class="flex items-center gap-x-3">
+                <span class="font-medium">Khó</span>
+                <span class="text-xs text-emerald-400">(~1500 ELO)</span>
+              </div>
+              <i class="fa-solid fa-play text-emerald-400 opacity-70 group-hover/item:opacity-100"></i>
+            </div>
+            <div onclick="startAIGame(4)" class="cursor-pointer flex items-center justify-between px-4 py-[13px] rounded-2xl hover:bg-white/5 border border-transparent hover:border-emerald-900/60 transition-colors group/item">
+              <div class="flex items-center gap-x-3">
+                <span class="font-medium">Cao thủ</span>
+                <span class="text-xs text-emerald-400">(~1800 ELO)</span>
+              </div>
+              <i class="fa-solid fa-play text-emerald-400 opacity-70 group-hover/item:opacity-100"></i>
+            </div>
+          </div>
+        </div>
+ 
+        <!-- Mode 2: Online -->
+        <div class="luxury-card rounded-3xl p-7 border border-slate-700">
+          <div class="flex items-start justify-between">
+            <div>
+              <div class="w-12 h-12 rounded-2xl bg-sky-900/40 flex items-center justify-center mb-5 ring-1 ring-sky-800/50">
+                <i class="fa-solid fa-globe text-sky-400 text-3xl"></i>
+              </div>
+              <h3 class="text-2xl font-semibold tracking-tight">Chơi Online 2 Người</h3>
+              <p class="text-slate-400 mt-1 text-sm">Thời gian thực • ELO thực</p>
+            </div>
+            <div class="px-3 py-1 text-xs rounded-full bg-sky-900/30 text-sky-300 font-medium self-start">REALTIME</div>
+          </div>
+          
+          <div class="mt-5 grid grid-cols-1 gap-2.5">
+            <button onclick="showCreateRoomModal()" 
+                    class="flex w-full items-center justify-center gap-x-2 bg-white/5 hover:bg-white/10 border border-slate-600 hover:border-sky-600/70 transition-colors py-3.5 rounded-2xl text-sm font-medium">
+              <i class="fa-solid fa-plus"></i>
+              <span>Tạo phòng (mã chia sẻ)</span>
+            </button>
+            
+            <button onclick="showJoinRoomModal()" 
+                    class="flex w-full items-center justify-center gap-x-2 bg-white/5 hover:bg-white/10 border border-slate-600 hover:border-sky-600/70 transition-colors py-3.5 rounded-2xl text-sm font-medium">
+              <i class="fa-solid fa-arrow-right-to-bracket"></i>
+              <span>Tham gia bằng mã</span>
+            </button>
+            
+            <button onclick="startQuickMatch()" 
+                    class="flex w-full items-center justify-center gap-x-2 bg-gradient-to-r from-sky-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 py-[15px] rounded-2xl text-sm font-semibold shadow-lg shadow-sky-900/40">
+              <i class="fa-solid fa-bolt-lightning"></i>
+              <span>TÌM TRẬN NHANH (ELO Matchmaking)</span>
+            </button>
+          </div>
+          <div class="mt-3 text-[10px] text-center text-slate-500">Kết nối qua Firebase • ±200 ELO ban đầu</div>
+        </div>
+ 
+        <!-- Mode 3: Local 2P -->
+        <div class="luxury-card rounded-3xl p-7 border border-slate-700">
+          <div class="flex items-start justify-between">
+            <div>
+              <div class="w-12 h-12 rounded-2xl bg-violet-900/40 flex items-center justify-center mb-5 ring-1 ring-violet-800/50">
+                <i class="fa-solid fa-users text-violet-400 text-3xl"></i>
+              </div>
+              <h3 class="text-2xl font-semibold tracking-tight">Chơi 2 Người</h3>
+              <p class="text-slate-400 mt-1 text-sm">Cùng thiết bị • Không cần mạng</p>
+            </div>
+          </div>
+          
+          <button onclick="startLocal2PGame()" 
+                  class="mt-6 w-full py-4 rounded-2xl bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 font-semibold tracking-wide flex items-center justify-center gap-x-2 shadow-lg shadow-violet-900/30">
+            <i class="fa-solid fa-gamepad"></i>
+            <span>BẮT ĐẦU TRẬN ĐẤU</span>
+          </button>
+          
+          <div class="mt-4 text-xs text-center text-slate-500">Hai người chơi luân phiên trên cùng một màn hình. Hoàn hảo cho bạn bè và gia đình.</div>
+        </div>
+      </div>
+ 
+      <!-- Quick Access -->
+      <div class="flex items-center justify-center gap-x-4 mt-10">
+        <button onclick="showLeaderboard()" 
+                class="flex items-center gap-x-2.5 px-6 py-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 text-sm font-medium transition-colors">
+          <i class="fa-solid fa-trophy text-amber-400"></i>
+          <span>Bảng xếp hạng</span>
+        </button>
+        <button onclick="showMatchHistory()" 
+                class="flex items-center gap-x-2.5 px-6 py-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 text-sm font-medium transition-colors">
+          <i class="fa-solid fa-history text-slate-300"></i>
+          <span>Lịch sử trận đấu</span>
+        </button>
+        <button onclick="showSettings()" 
+                class="flex items-center gap-x-2.5 px-6 py-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 text-sm font-medium transition-colors">
+          <i class="fa-solid fa-cog text-slate-300"></i>
+          <span>Cài đặt</span>
+        </button>
+      </div>
+    </div>
+ 
+    <!-- GAME VIEW -->
+    <div id="view-game" class="hidden max-w-[1280px] mx-auto">
+      <div class="flex items-center justify-between mb-4 px-1">
+        <div>
+          <div id="game-mode-label" class="text-amber-300 text-sm tracking-wider font-semibold"></div>
+          <div id="game-status-text" class="text-2xl font-semibold tracking-tight"></div>
+        </div>
+        
+        <div class="flex items-center gap-x-3">
+          <button onclick="offerDraw()" 
+                  class="px-4 py-2 text-sm rounded-2xl border border-slate-700 hover:bg-slate-800 transition flex items-center gap-x-2">
+            <i class="fa-solid fa-handshake"></i>
+            <span class="hidden sm:inline">Cầu hòa</span>
+          </button>
+          <button onclick="resignGame()" 
+                  class="px-5 py-2 text-sm rounded-2xl bg-red-900/70 hover:bg-red-900 text-red-300 border border-red-800 flex items-center gap-x-2 transition">
+            <i class="fa-solid fa-flag"></i>
+            <span class="hidden sm:inline">Đầu hàng</span>
+          </button>
+          <button onclick="exitGame()" 
+                  class="px-4 py-2 text-sm rounded-2xl border border-slate-700 hover:bg-slate-800 transition flex items-center gap-x-2">
+            <i class="fa-solid fa-door-open"></i>
+            <span class="hidden sm:inline">Rời trận</span>
+          </button>
+        </div>
+      </div>
+ 
+      <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+        
+        <!-- LEFT: Opponent + Captured -->
+        <div class="xl:col-span-3">
+          <!-- Opponent Info -->
+          <div class="player-card rounded-3xl p-4 mb-4">
+            <div class="flex items-center gap-3">
+              <div id="opponent-avatar" class="w-11 h-11 rounded-2xl overflow-hidden ring-2 ring-offset-2 ring-offset-[#0a0c10] ring-slate-700 flex-shrink-0 bg-slate-800"></div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-x-2">
+                  <div id="opponent-name" class="font-semibold text-lg tracking-tight truncate"></div>
+                  <div id="opponent-elo" class="text-xs px-2 py-px bg-slate-800 rounded font-mono text-amber-300"></div>
+                </div>
+                <div id="opponent-status" class="text-xs text-emerald-400 flex items-center gap-x-1">
+                  <i class="fa-solid fa-circle text-[8px]"></i> <span>Đang chơi</span>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Opponent Clock -->
+            <div class="mt-4">
+              <div class="flex items-baseline justify-between text-xs text-slate-400 mb-1.5 px-1">
+                <div>ĐỐI THỦ</div>
+                <div id="opponent-time" class="timer text-3xl font-semibold text-white tabular-nums">10:00</div>
+              </div>
+              <div class="h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div id="opponent-time-bar" class="h-2 bg-gradient-to-r from-sky-400 to-indigo-400 transition-all" style="width: 100%"></div>
+              </div>
+            </div>
+          </div>
+ 
+          <!-- Captured by opponent -->
+          <div class="bg-[#111827] border border-slate-800 rounded-3xl p-4">
+            <div class="text-xs text-slate-400 mb-2 px-1 tracking-wider">QUÂN BỊ BẮT (ĐỐI THỦ)</div>
+            <div id="captured-by-opponent" class="flex flex-wrap gap-1 min-h-[38px]"></div>
+            <div id="material-diff" class="mt-2 text-xs px-1 text-emerald-400 font-medium"></div>
+          </div>
+        </div>
+ 
+        <!-- CENTER: CHESS BOARD -->
+        <div class="xl:col-span-6 flex justify-center">
+          <div class="relative">
+            <!-- Board container -->
+            <div id="chessboard-container" 
+                 class="chess-board w-[min(92vw,640px)] aspect-square p-2.5 rounded-[14px]">
+              <div id="chessboard" 
+                   class="grid grid-cols-8 w-full h-full rounded-lg overflow-hidden relative select-none"
+                   style="box-shadow: inset 0 0 60px rgb(0 0 0 / 0.55);">
+                <!-- Populated dynamically by JS -->
+              </div>
+            </div>
+            
+            <!-- Coordinates -->
+            <div id="board-coords" class="absolute -left-5 top-2 bottom-2 flex flex-col justify-between text-[10px] font-bold text-slate-500 pointer-events-none"></div>
+            <div id="board-files" class="absolute -bottom-4 left-2 right-2 flex justify-between text-[10px] font-bold text-slate-500 pointer-events-none px-1"></div>
+            
+            <!-- Thinking indicator for AI -->
+            <div id="ai-thinking" class="hidden absolute -bottom-9 left-1/2 -translate-x-1/2 px-4 py-1 bg-slate-900 border border-slate-700 rounded-3xl text-xs flex items-center gap-x-2">
+              <div class="flex gap-x-1">
+                <div class="w-1 h-1 bg-amber-400 rounded-full animate-bounce"></div>
+                <div class="w-1 h-1 bg-amber-400 rounded-full animate-bounce" style="animation-delay: 120ms"></div>
+                <div class="w-1 h-1 bg-amber-400 rounded-full animate-bounce" style="animation-delay: 240ms"></div>
+              </div>
+              <span class="text-amber-300">Máy đang suy nghĩ...</span>
+            </div>
+          </div>
+        </div>
+ 
+        <!-- RIGHT: Your Info + Chat / Moves -->
+        <div class="xl:col-span-3 flex flex-col gap-y-4">
+          <!-- Your Card -->
+          <div class="player-card rounded-3xl p-4">
+            <div class="flex items-center gap-3">
+              <div id="player-avatar" class="w-11 h-11 rounded-2xl overflow-hidden ring-2 ring-offset-2 ring-offset-[#0a0c10] ring-amber-900/70 flex-shrink-0 bg-slate-800"></div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-x-2">
+                  <div id="player-name" class="font-semibold text-lg tracking-tight truncate"></div>
+                  <div id="player-elo" class="text-xs px-2 py-px bg-slate-800 rounded font-mono text-amber-300"></div>
+                </div>
+                <div class="text-xs text-emerald-400 flex items-center gap-x-1">
+                  <i class="fa-solid fa-circle text-[8px]"></i> <span>Bạn</span>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Your Clock -->
+            <div class="mt-4">
+              <div class="flex items-baseline justify-between text-xs text-slate-400 mb-1.5 px-1">
+                <div>BẠN</div>
+                <div id="player-time" class="timer text-3xl font-semibold text-white tabular-nums">10:00</div>
+              </div>
+              <div class="h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div id="player-time-bar" class="h-2 bg-gradient-to-r from-amber-400 to-yellow-300 transition-all" style="width: 100%"></div>
+              </div>
+            </div>
+          </div>
+ 
+          <!-- Move list + Chat toggle -->
+          <div class="flex-1 flex flex-col bg-[#111827] border border-slate-800 rounded-3xl overflow-hidden min-h-[260px]">
+            <div class="flex border-b border-slate-800 text-xs">
+              <div onclick="switchGameSidebarTab('moves')" id="tab-moves"
+                   class="flex-1 text-center py-2.5 cursor-pointer border-b-2 border-amber-400 text-amber-300 font-medium">NƯỚC ĐI</div>
+              <div onclick="switchGameSidebarTab('chat')" id="tab-chat"
+                   class="flex-1 text-center py-2.5 cursor-pointer text-slate-400 hover:text-slate-200 transition">CHAT <span id="chat-unread" class="hidden ml-1 px-1.5 text-[10px] py-px rounded bg-red-500 text-white">0</span></div>
+            </div>
+            
+            <!-- Moves Panel -->
+            <div id="sidebar-moves" class="flex-1 p-3 overflow-y-auto move-list text-sm">
+              <div id="move-list" class="space-y-px font-medium"></div>
+            </div>
+            
+            <!-- Chat Panel (only visible in online) -->
+            <div id="sidebar-chat" class="hidden flex-1 flex flex-col min-h-0">
+              <div id="chat-messages" class="flex-1 overflow-y-auto p-3 space-y-3 text-sm move-list"></div>
+              <div class="p-2.5 border-t border-slate-800 bg-[#0d111a]">
+                <div class="flex gap-2">
+                  <input id="chat-input" type="text" 
+                         class="flex-1 bg-slate-900 border border-slate-700 text-sm focus:border-amber-700 rounded-2xl px-4 py-2 outline-none placeholder:text-slate-500"
+                         placeholder="Nhắn tin...">
+                  <button onclick="sendChatMessage()" 
+                          class="px-4 rounded-2xl bg-amber-300 text-[#0a0c10] hover:bg-amber-200 transition flex items-center">
+                    <i class="fa-solid fa-paper-plane"></i>
+                  </button>
+                </div>
+                <div class="flex gap-1 mt-1.5 px-1 text-[10px]">
+                  <div onclick="quickEmoji('👍')" class="cursor-pointer hover:bg-slate-800 px-2 py-px rounded">👍</div>
+                  <div onclick="quickEmoji('👏')" class="cursor-pointer hover:bg-slate-800 px-2 py-px rounded">👏</div>
+                  <div onclick="quickEmoji('😮')" class="cursor-pointer hover:bg-slate-800 px-2 py-px rounded">😮</div>
+                  <div onclick="quickEmoji('😤')" class="cursor-pointer hover:bg-slate-800 px-2 py-px rounded">😤</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+      </div>
+    </div>
+ 
+    <!-- LEADERBOARD VIEW -->
+    <div id="view-leaderboard" class="hidden max-w-[820px] mx-auto">
+      <div class="flex items-center justify-between mb-6 px-1">
+        <div>
+          <div class="luxury-font text-4xl tracking-tighter">Bảng Xếp Hạng</div>
+          <div class="text-slate-400">Top người chơi theo ELO</div>
+        </div>
+        <div class="flex gap-x-2">
+          <button onclick="loadLeaderboard(true)" 
+                  class="px-5 py-2.5 flex items-center gap-x-2 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 text-sm">
+            <i class="fa-solid fa-sync"></i>
+            <span>Làm mới</span>
+          </button>
+          <button onclick="switchView('menu')" class="px-5 py-2.5 text-sm rounded-2xl border border-slate-700">Đóng</button>
+        </div>
+      </div>
+      
+      <div class="bg-[#111827] border border-slate-800 rounded-3xl overflow-hidden">
+        <div id="leaderboard-list" class="divide-y divide-slate-800">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+      <div class="text-center text-xs text-slate-500 mt-4">Dữ liệu được cập nhật từ Firestore • Top 30</div>
+    </div>
+ 
+    <!-- MATCH HISTORY VIEW -->
+    <div id="view-history" class="hidden max-w-[1000px] mx-auto">
+      <div class="flex items-center justify-between mb-6 px-1">
+        <div>
+          <div class="luxury-font text-4xl tracking-tighter">Lịch Sử Trận Đấu</div>
+          <div class="text-slate-400">Các ván cờ đã hoàn thành • Nhấn Xem lại để xem lại nước đi</div>
+        </div>
+        <button onclick="switchView('menu')" class="px-6 py-2.5 text-sm rounded-2xl border border-slate-700">Quay lại</button>
+      </div>
+      
+      <div id="history-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Populated dynamically -->
+      </div>
+    </div>
+ 
+    <!-- REPLAY VIEW -->
+    <div id="view-replay" class="hidden max-w-[1100px] mx-auto">
+      <div class="mb-5 px-1 flex items-center justify-between">
+        <div>
+          <div class="luxury-font text-4xl tracking-tighter">Xem Lại Ván Cờ</div>
+          <div id="replay-meta" class="text-sm text-slate-400"></div>
+        </div>
+        <button onclick="exitReplay()" class="px-5 py-2 rounded-2xl bg-white/5 border border-white/10 text-sm">Đóng bản xem lại</button>
+      </div>
+      
+      <div class="grid grid-cols-1 xl:grid-cols-12 gap-x-6 gap-y-5">
+        <!-- Replay Board -->
+        <div class="xl:col-span-7">
+          <div class="chess-board w-[min(90vw,580px)] aspect-square p-2.5 rounded-[14px] mx-auto">
+            <div id="replay-board" class="grid grid-cols-8 w-full h-full rounded-lg overflow-hidden relative" style="box-shadow: inset 0 0 60px rgb(0 0 0 / 0.55);"></div>
+          </div>
+          
+          <!-- Replay controls -->
+          <div class="mt-5 max-w-[580px] mx-auto">
+            <div class="flex items-center gap-3">
+              <button onclick="replayFirst()" class="w-9 h-9 flex items-center justify-center rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700"><i class="fa-solid fa-backward"></i></button>
+              <button onclick="replayPrev()" class="w-9 h-9 flex items-center justify-center rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700"><i class="fa-solid fa-step-backward"></i></button>
+              
+              <div class="flex-1 px-1">
+                <input type="range" id="replay-slider" min="0" max="0" step="1" value="0" 
+                       oninput="jumpToReplayMove(this.value)"
+                       class="replay-slider w-full accent-amber-400">
+              </div>
+              
+              <button onclick="replayNext()" class="w-9 h-9 flex items-center justify-center rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700"><i class="fa-solid fa-step-forward"></i></button>
+              <button onclick="replayLast()" class="w-9 h-9 flex items-center justify-center rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700"><i class="fa-solid fa-forward"></i></button>
+            </div>
+            
+            <div class="flex justify-between text-xs text-slate-400 mt-1.5 px-1">
+              <div id="replay-move-counter">Nước 0 / 0</div>
+              <div id="replay-result" class="font-medium"></div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Replay Move List + Info -->
+        <div class="xl:col-span-5">
+          <div class="bg-[#111827] border border-slate-800 rounded-3xl p-5 h-full flex flex-col">
+            <div class="font-medium text-sm text-amber-300 mb-2">DANH SÁCH NƯỚC ĐI</div>
+            <div id="replay-move-list" class="flex-1 overflow-auto move-list text-sm leading-snug pr-1"></div>
+            
+            <div class="pt-4 mt-auto border-t border-slate-800 text-sm">
+              <div id="replay-rating-info" class="text-center p-3 rounded-2xl bg-slate-900/60"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+ 
+  <!-- ============ MODALS ============ -->
+ 
+  <!-- Auth / Login Modal -->
+  <div id="auth-modal" onclick="if (event.target.id === 'auth-modal') hideAuthModal()" class="hidden fixed inset-0 bg-black/80 backdrop-blur z-[90] flex items-center justify-center">
+    <div onclick="event.stopImmediatePropagation()" class="luxury-card w-full max-w-md mx-4 rounded-3xl p-8 border border-slate-600">
+      <div class="text-center mb-6">
+        <div class="mx-auto w-14 h-14 bg-gradient-to-br from-amber-300 to-yellow-400 flex items-center justify-center rounded-2xl mb-4">
+          <i class="fa-solid fa-chess-king text-[#0f172a] text-4xl"></i>
+        </div>
+        <div class="luxury-font text-3xl tracking-tight">Chào mừng đến với Cờ Vua Cao Cấp</div>
+        <p class="text-sm text-slate-400 mt-1">Đăng nhập để lưu ELO, lịch sử và chơi online</p>
+      </div>
+      
+      <div class="space-y-3">
+        <button onclick="loginWithGoogle()" 
+                class="flex w-full items-center justify-center gap-x-3 bg-white text-slate-900 hover:bg-amber-50 font-semibold py-[13px] rounded-2xl transition">
+          <i class="fa-brands fa-google text-xl"></i>
+          <span>Đăng nhập bằng Google</span>
+        </button>
+        
+        <button onclick="loginWithFacebook()" 
+                class="flex w-full items-center justify-center gap-x-3 bg-[#1877f2] hover:bg-[#166fe0] font-semibold py-[13px] rounded-2xl transition">
+          <i class="fa-brands fa-facebook text-xl"></i>
+          <span>Đăng nhập bằng Facebook</span>
+        </button>
+        
+        <div class="pt-2">
+          <button onclick="hideAuthModal()" class="w-full text-center py-2 text-xs text-slate-400 hover:text-slate-300">Tiếp tục với chế độ khách (chỉ chơi offline)</button>
+        </div>
+      </div>
+    </div>
+  </div>
+ 
+  <!-- Create Room Modal -->
+  <div id="create-room-modal" onclick="if (event.target.id === 'create-room-modal') hideCreateRoomModal()" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-[90] flex items-center justify-center">
+    <div onclick="event.stopImmediatePropagation()" class="luxury-card w-full max-w-md mx-4 rounded-3xl p-7 border border-slate-700">
+      <div class="luxury-font text-3xl tracking-tight mb-1">Tạo phòng mới</div>
+      <p class="text-slate-400 text-sm mb-5">Chia sẻ mã phòng để bạn bè tham gia.</p>
+      
+      <div class="bg-slate-900 border border-slate-700 rounded-2xl p-5 text-center">
+        <div class="text-xs text-slate-400 mb-1">MÃ PHÒNG CỦA BẠN</div>
+        <div id="room-code-display" class="font-mono text-5xl tracking-[6px] font-bold text-amber-300">A7K9P2</div>
+      </div>
+      
+      <div class="mt-5 flex gap-3">
+        <button onclick="copyRoomCode()" class="flex-1 py-3 text-sm rounded-2xl border border-slate-700 hover:bg-slate-800 flex items-center justify-center gap-x-2">
+          <i class="fa-solid fa-copy"></i> <span>Sao chép mã</span>
+        </button>
+        <button onclick="createRoomAndStart()" class="flex-1 py-3 bg-amber-300 text-[#0f172a] text-sm font-semibold rounded-2xl flex items-center justify-center gap-x-2">
+          <span>Bắt đầu trận</span>
+        </button>
+      </div>
+    </div>
+  </div>
+ 
+  <!-- Join Room Modal -->
+  <div id="join-room-modal" onclick="if (event.target.id === 'join-room-modal') hideJoinRoomModal()" class="hidden fixed inset-0 bg-black/70 backdrop-blur-sm z-[90] flex items-center justify-center">
+    <div onclick="event.stopImmediatePropagation()" class="luxury-card w-full max-w-sm mx-4 rounded-3xl p-7 border border-slate-700">
+      <div class="luxury-font text-3xl tracking-tight mb-5">Tham gia phòng</div>
+      
+      <input id="join-code-input" type="text" maxlength="8" placeholder="Nhập mã phòng (VD: A7K9P2)"
+             class="w-full font-mono text-center text-2xl tracking-widest uppercase bg-slate-900 border border-slate-700 focus:border-amber-400 rounded-2xl py-4 outline-none">
+      
+      <div class="mt-5 flex gap-3">
+        <button onclick="hideJoinRoomModal()" class="flex-1 py-3 text-sm rounded-2xl border border-slate-700">Hủy</button>
+        <button onclick="joinRoomByCode()" class="flex-1 py-3 bg-sky-400 text-[#0f172a] font-semibold rounded-2xl text-sm">Tham gia</button>
+      </div>
+    </div>
+  </div>
+ 
+  <!-- Game Result Modal -->
+  <div id="result-modal" onclick="if (event.target.id === 'result-modal') hideResultModal()" class="hidden fixed inset-0 bg-black/90 backdrop-blur z-[95] flex items-center justify-center">
+    <div onclick="event.stopImmediatePropagation()" class="luxury-card w-full max-w-lg mx-4 rounded-3xl p-8 border border-slate-700 text-center">
+      <div id="result-icon" class="mx-auto w-16 h-16 flex items-center justify-center mb-2"></div>
+      <div id="result-title" class="luxury-font text-4xl tracking-tighter"></div>
+      <div id="result-subtitle" class="text-slate-400 mt-1"></div>
+      
+      <!-- ELO Change -->
+      <div class="my-6 inline-flex items-center gap-x-4 bg-slate-900 border border-slate-700 rounded-3xl px-8 py-4">
+        <div>
+          <div class="text-xs text-slate-400">ELO CỦA BẠN</div>
+          <div class="flex items-baseline justify-center gap-x-1.5">
+            <span id="elo-before" class="text-3xl font-semibold tabular-nums"></span>
+            <span id="elo-after" class="text-4xl font-bold tabular-nums"></span>
+          </div>
+        </div>
+        <div id="elo-delta" class="rating-change text-xl px-4 py-1"></div>
+      </div>
+      
+      <div class="flex flex-col gap-y-3">
+        <button onclick="playAgain()" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-amber-300 to-yellow-300 text-[#0f172a] font-semibold flex items-center justify-center gap-x-2">
+          <i class="fa-solid fa-redo"></i>
+          <span>Chơi lại</span>
+        </button>
+        
+        <div class="grid grid-cols-2 gap-3">
+          <button onclick="goToHistoryFromResult()" class="py-3.5 text-sm rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10">Xem lịch sử</button>
+          <button onclick="hideResultModalAndExit()" class="py-3.5 text-sm rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10">Về menu chính</button>
+        </div>
+      </div>
+    </div>
+  </div>
+ 
+  <!-- Post-Game Feedback Modal -->
+  <div id="feedback-modal" onclick="if (event.target.id === 'feedback-modal') hideFeedbackModal()" class="hidden fixed inset-0 bg-black/80 z-[100] flex items-center justify-center">
+    <div onclick="event.stopImmediatePropagation()" class="luxury-card w-full max-w-sm mx-4 rounded-3xl p-7 border border-slate-700">
+      <div class="text-center mb-4">
+        <div class="text-lg font-semibold">Bạn thấy trận đấu này thế nào?</div>
+        <div class="text-xs text-slate-400 mt-0.5">Phản hồi giúp chúng tôi cải thiện trải nghiệm</div>
+      </div>
+      
+      <div class="flex justify-center gap-6 my-5">
+        <button onclick="submitFeedback(1)" class="flex flex-col items-center gap-y-1 text-emerald-300 hover:text-emerald-200 transition">
+          <div class="text-5xl">👍</div>
+          <div class="text-xs font-medium">Hài lòng</div>
+        </button>
+        <button onclick="submitFeedback(-1)" class="flex flex-col items-center gap-y-1 text-red-300 hover:text-red-200 transition">
+          <div class="text-5xl">👎</div>
+          <div class="text-xs font-medium">Không hài lòng</div>
+        </button>
+      </div>
+      
+      <textarea id="feedback-comment" rows="2" placeholder="Nhận xét (không bắt buộc)..." 
+                class="w-full bg-slate-900 border border-slate-700 text-sm rounded-2xl px-4 py-3 outline-none resize-y"></textarea>
+      
+      <div class="flex gap-x-3 mt-4">
+        <button onclick="hideFeedbackModal()" class="flex-1 py-2.5 text-sm text-slate-300 hover:bg-slate-800 rounded-2xl border border-slate-700">Bỏ qua</button>
+        <button onclick="submitFeedbackWithComment()" class="flex-1 py-2.5 text-sm bg-amber-300 hover:bg-amber-200 text-[#0f172a] font-semibold rounded-2xl">Gửi phản hồi</button>
+      </div>
+    </div>
+  </div>
+ 
+  <!-- Promotion Modal -->
+  <div id="promotion-modal" class="hidden fixed inset-0 bg-black/70 z-[90] flex items-center justify-center">
+    <div onclick="event.stopImmediatePropagation()" class="luxury-card rounded-3xl p-6 border border-slate-700 w-full max-w-xs">
+      <div class="text-center text-lg font-medium mb-4">Chọn quân phong cấp</div>
+      <div class="grid grid-cols-4 gap-3" id="promotion-choices"></div>
+    </div>
+  </div>
+ 
+  <!-- Settings Modal -->
+  <div id="settings-modal" onclick="if (event.target.id === 'settings-modal') hideSettingsModal()" class="hidden fixed inset-0 bg-black/80 backdrop-blur z-[90] flex items-center justify-center">
+    <div onclick="event.stopImmediatePropagation()" class="luxury-card w-full max-w-md mx-4 rounded-3xl p-7 border border-slate-700">
+      <div class="flex justify-between items-center mb-6">
+        <div class="luxury-font text-3xl">Cài đặt</div>
+        <button onclick="hideSettingsModal()" class="text-xl text-slate-400 hover:text-white">&times;</button>
+      </div>
+      
+      <div class="space-y-6 text-sm">
+        <!-- Board Theme -->
+        <div>
+          <div class="font-medium mb-2 text-amber-300">Chủ đề bàn cờ</div>
+          <div class="grid grid-cols-5 gap-2" id="theme-swatches">
+            <!-- JS populated -->
+          </div>
+        </div>
+        
+        <!-- Piece Style -->
+        <div>
+          <div class="font-medium mb-2 text-amber-300">Kiểu quân cờ</div>
+          <div class="flex gap-2">
+            <button onclick="setPieceStyle('classic')" class="flex-1 py-2 text-xs rounded-2xl border border-slate-600 hover:border-amber-400" id="style-classic">Cổ điển (Staunton)</button>
+            <button onclick="setPieceStyle('modern')" class="flex-1 py-2 text-xs rounded-2xl border border-slate-600 hover:border-amber-400" id="style-modern">Hiện đại</button>
+          </div>
+        </div>
+        
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="font-medium">Âm thanh</div>
+            <div class="text-xs text-slate-400">Hiệu ứng cao cấp (Web Audio)</div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="sound-toggle" class="sr-only peer" onchange="toggleSound()">
+            <div class="w-10 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[1px] after:left-[1px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+          </label>
+        </div>
+        
+        <div>
+          <div class="font-medium mb-1.5">Tên hiển thị</div>
+          <div class="flex gap-2">
+            <input id="username-input" class="flex-1 bg-slate-900 border border-slate-700 rounded-2xl px-4 py-2 text-sm" placeholder="Tên của bạn">
+            <button onclick="saveUsername()" class="px-5 text-sm rounded-2xl bg-amber-300 text-black font-semibold">Lưu</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+ 
+  <!-- Toast container -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-[120] space-y-2"></div>
+ 
+  <!-- ============ JAVASCRIPT ============ -->
+  <script>
+    // ========================================================================
+    // ====================== FIREBASE CONFIG & SETUP =========================
+    // ========================================================================
+    /*
+      === HƯỚNG DẪN CÀI ĐẶT FIREBASE (BẮT BUỘC ĐỂ DÙNG ONLINE / ELO / LỊCH SỬ / LEADERBOARD) ===
+      
+      1. Truy cập https://console.firebase.google.com/
+      2. Tạo dự án mới (hoặc dùng dự án sẵn).
+      3. Trong Authentication → Sign-in method:
+         - Bật Google (rất dễ)
+         - Bật Facebook (cần tạo Facebook App tại https://developers.facebook.com và thêm OAuth redirect)
+      4. Tạo Firestore Database (bắt đầu ở chế độ Production hoặc Test, sau cập nhật Rules).
+      5. Thêm ứng dụng Web → copy cấu hình firebaseConfig.
+      6. Dán cấu hình của bạn vào bên dưới (thay thế object hiện tại).
+      
+      === CẤU TRÚC FIRESTORE (QUAN TRỌNG) ===
+      
+      /users/{uid}
+        - uid: string
+        - username: string
+        - avatar: string (URL từ Google/Facebook hoặc placeholder)
+        - elo: number (mặc định 1200)
+        - createdAt: timestamp
+        - gamesPlayed?: number
+      
+      /rooms/{roomCode}
+        - code: string
+        - white: {uid, name, avatar, elo}
+        - black: {uid, name, avatar, elo}
+        - status: "waiting" | "playing" | "finished"
+        - moves: array of SAN strings (hoặc subcollection)
+        - currentFen: string (optional)
+        - turn: "w" | "b"
+        - whiteTime: number (ms còn lại)
+        - blackTime: number (ms còn lại)
+        - lastMoveTimestamp: number (client timestamp hoặc server)
+        - result: null | "1-0" | "0-1" | "1/2-1/2"
+        - timeControl: { base: number, increment: number }
+        - createdAt
+      
+      /rooms/{roomCode}/chat/{messageId}
+        - text: string
+        - uid: string
+        - name: string
+        - avatar: string
+        - timestamp: timestamp
+      
+      /games/{gameId}
+        - white: {...}
+        - black: {...}
+        - result: "win" | "loss" | "draw" (từ góc nhìn của một người)
+        - ratingDelta: number
+        - myRatingBefore / myRatingAfter
+        - moves: string[] (SAN list đầy đủ)
+        - date: timestamp
+        - duration: number (giây)
+        - moveCount: number
+        - mode: "ai" | "online" | "local"
+        - opponent: {name, rating?, type?}
+        - participants: string[] (uid list) để query dễ dàng
+      
+      /feedbacks/{id}
+        - gameId
+        - fromUid
+        - rating: 1 | -1
+        - comment: string
+        - timestamp
+      
+      === SECURITY RULES KHUYẾN NGHỊ (Firestore) ===
+      rules_version = '2';
+      service cloud.firestore {
+        match /databases/{database}/documents {
+          match /users/{uid} {
+            allow read: if true;
+            allow write: if request.auth.uid == uid;
+          }
+          match /rooms/{roomId} {
+            allow read: if request.auth.uid != null;
+            allow create: if request.auth.uid != null;
+            allow update: if request.auth.uid in [resource.data.white.uid, resource.data.black.uid];
+          }
+          match /rooms/{roomId}/chat/{msgId} {
+            allow write: if request.auth.uid != null;
+            allow read: if request.auth.uid != null;
+          }
+          match /games/{gameId} {
+            allow read: if request.auth.uid != null;
+            allow create: if request.auth.uid != null;
+          }
+          match /feedbacks/{fbId} {
+            allow write: if request.auth.uid != null;
+            allow read: if request.auth.uid != null;
+          }
+        }
+      }
+    */
+    
+    // THAY THẾ BẰNG CẤU HÌNH FIREBASE CỦA BẠN (BẮT BUỘC CHO TÍNH NĂNG ONLINE)
+    const firebaseConfig = {
+      apiKey: "AIzaSyBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      authDomain: "your-project-id.firebaseapp.com",
+      projectId: "your-project-id",
+      storageBucket: "your-project-id.appspot.com",
+      messagingSenderId: "123456789012",
+      appId: "1:123456789012:web:xxxxxxxxxxxxxxxxxxxxxxxx"
+    };
+    
+    // Khởi tạo Firebase (sẽ hoạt động nếu config đúng)
+    let firebaseApp = null;
+    let auth = null;
+    let db = null;
+    
+    function initFirebase() {
+      try {
+        if (typeof firebase !== 'undefined' && firebaseConfig.apiKey && !firebaseConfig.apiKey.includes('xxxx')) {
+          firebaseApp = firebase.initializeApp(firebaseConfig);
+          auth = firebase.auth();
+          db = firebase.firestore();
+          
+          // Lắng nghe auth state
+          auth.onAuthStateChanged(user => {
+            handleAuthStateChange(user);
+          });
+          
+          console.log('%c[Firebase] Đã khởi tạo thành công', 'color:#64748b');
+          return true;
+        } else {
+          console.warn('%c[Firebase] Chưa cấu hình. Một số tính năng online sẽ bị vô hiệu.', 'color:#f59e0b');
+          return false;
+        }
+      } catch (e) {
+        console.error('[Firebase] Lỗi khởi tạo:', e);
+        return false;
+      }
+    }
+    
+    // ========================================================================
+    // ====================== GLOBAL STATE & CONFIG ===========================
+    // ========================================================================
+    
+    let currentUser = null;           // { uid, username, avatar, elo }
+    let guestElo = 1200;              // ELO cục bộ khi chơi khách
+    
+    let chess = null;                 // chess.js instance
+    let currentMode = null;           // 'ai' | 'online' | 'local'
+    let currentDifficulty = 2;        // 1-4 cho AI
+    let currentRoomCode = null;       // mã phòng online
+    let isWhite = true;               // màu của người chơi hiện tại (true = trắng)
+    let gameActive = false;
+    
+    let playerTime = 600000;          // ms
+    let opponentTime = 600000;
+    let increment = 5000;             // 5 giây
+    let timerInterval = null;
+    let lastMoveTimestamp = Date.now();
+    
+    // Board themes (4K sharp)
+    const BOARD_THEMES = {
+      classic: { name: 'Gỗ Óc Chó Cổ Điển', light: '#e8d9b8', dark: '#5c4633', class: '' },
+      marble:  { name: 'Cẩm Thạch Sang Trọng', light: '#e8e4d9', dark: '#5a5d6b', class: 'board-theme-marble' },
+      midnight:{ name: 'Đêm Xanh Midnight', light: '#3f4a5f', dark: '#1e2937', class: 'board-theme-midnight' },
+      emerald: { name: 'Ngọc Lục Bảo', light: '#c8d9c3', dark: '#2f4a3a', class: 'board-theme-emerald' },
+      royal:   { name: 'Hoàng Gia Vàng', light: '#f4e9c9', dark: '#5c4033', class: 'board-theme-royal' }
+    };
+    let currentBoardTheme = 'classic';
+    let currentPieceStyle = 'classic';
+    let soundEnabled = true;
+    
+    let selectedSquare = null;
+    let gameHistory = [];             // Lịch sử nước đi (cho replay)
+    let capturedPieces = { w: [], b: [] };
+    
+    // Online listeners
+    let roomUnsubscribe = null;
+    let chatUnsubscribe = null;
+    
+    // Replay state
+    let replayChess = null;
+    let replayMoves = [];
+    let replayIndex = 0;
+    let currentReplayGame = null;
+    
+    // AI engine state
+    let aiThinking = false;
+    
+    // Chat unread
+    let unreadChat = 0;
+    
+    // Current game metadata for saving
+    let currentGameMeta = {};
+    
+    // ========================================================================
+    // ====================== HIGH-DETAIL SVG CHESS PIECES ====================
+    // ========================================================================
+    /*
+      Các SVG được thiết kế thủ công với:
+      - Gradient cao cấp (metallic, ivory, ebony)
+      - Subtle 3D bevel & inner highlights
+      - Drop shadows mạnh mẽ để có chiều sâu
+      - Chi tiết tinh xảo (vương miện, mũ giáp, v.v.)
+      Phù hợp hiển thị cực nét trên màn 4K.
+    */
+    
+    const PIECE_SVGS = {
+      classic: {
+        wK: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="wkg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f8f1e3"/><stop offset="100%" stop-color="#d4c4a3"/></linearGradient><filter id="wshadow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur in="SourceAlpha" stdDeviation="1.5"/><feOffset dx="0" dy="2" result="offsetblur"/><feComponentTransfer><feFuncA type="linear" slope="0.45"/></feComponentTransfer><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><g fill="url(#wkg)" stroke="#5c4633" stroke-width="1.2" filter="url(#wshadow)"><path d="M22.5 9.5 L25 6 L29 9.5 L27 13.5 L18 13.5 L16 9.5 L20 6 Z"/><circle cx="22.5" cy="11.5" r="2.8"/><rect x="15" y="15" width="15" height="4" rx="1"/><path d="M15 19 Q22.5 30 30 19 L30 31 Q22.5 37 15 31 Z"/><rect x="13" y="31" width="19" height="4.5" rx="1.2"/><rect x="11.5" y="36" width="22" height="4" rx="1"/></g></svg>`,
+        wQ: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="wqg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f8f1e3"/><stop offset="100%" stop-color="#d4c4a3"/></linearGradient></defs><g fill="url(#wqg)" stroke="#5c4633" stroke-width="1.1"><circle cx="22.5" cy="8" r="3.5"/><circle cx="13" cy="11" r="2.5"/><circle cx="32" cy="11" r="2.5"/><circle cx="8" cy="17" r="2"/><circle cx="37" cy="17" r="2"/><path d="M15 15 Q22.5 28 30 15 L30 30 Q22.5 36 15 30 Z"/><rect x="12.5" y="30.5" width="20" height="4.2" rx="1"/><rect x="10.5" y="35.5" width="24" height="4.5" rx="1.2"/></g></svg>`,
+        wR: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="wrg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f8f1e3"/><stop offset="100%" stop-color="#d4c4a3"/></linearGradient></defs><g fill="url(#wrg)" stroke="#5c4633" stroke-width="1.1"><rect x="11" y="7" width="23" height="7" rx="1.5"/><rect x="13" y="14" width="19" height="5"/><path d="M12 19 L33 19 L33 30 Q22.5 34 12 30 Z"/><rect x="10" y="30" width="25" height="4.5" rx="1"/><rect x="9" y="35" width="27" height="4.5" rx="1.2"/></g></svg>`,
+        wB: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="wbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f8f1e3"/><stop offset="100%" stop-color="#d4c4a3"/></linearGradient></defs><g fill="url(#wbg)" stroke="#5c4633" stroke-width="1"><circle cx="22.5" cy="8" r="4"/><path d="M15.5 15 Q22.5 26 29.5 15 L29.5 29 Q22.5 35 15.5 29 Z"/><rect x="13" y="29" width="19" height="4" rx="1"/><rect x="11.5" y="34" width="22" height="4.5" rx="1"/></g></svg>`,
+        wN: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="wng" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f8f1e3"/><stop offset="100%" stop-color="#d4c4a3"/></linearGradient></defs><g fill="url(#wng)" stroke="#5c4633" stroke-width="1"><path d="M14 28 Q12 14 22 10 Q31 14 30 27 Q25 33 19 30 Z"/><circle cx="27" cy="13" r="3.5"/><rect x="13" y="29" width="20" height="4" rx="1"/><rect x="11" y="34.5" width="23" height="4" rx="1.1"/></g></svg>`,
+        wP: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="wpg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f8f1e3"/><stop offset="100%" stop-color="#d4c4a3"/></linearGradient></defs><g fill="url(#wpg)" stroke="#5c4633" stroke-width="1"><circle cx="22.5" cy="12" r="5.5"/><path d="M15 19 Q22.5 27 30 19 L30 28 Q22.5 33 15 28 Z"/><rect x="13" y="28" width="19" height="4.5" rx="1"/><rect x="11.5" y="33.5" width="22" height="4.5" rx="1"/></g></svg>`,
+        
+        bK: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="bkg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4a4a4a"/><stop offset="100%" stop-color="#1f242b"/></linearGradient><filter id="bks" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur in="SourceAlpha" stdDeviation="1.8"/><feOffset dx="0" dy="2.5" result="off"/><feComponentTransfer><feFuncA type="linear" slope="0.55"/></feComponentTransfer><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><g fill="url(#bkg)" stroke="#111" stroke-width="1.3" filter="url(#bks)"><path d="M22.5 9.5 L25 6 L29 9.5 L27 13.5 L18 13.5 L16 9.5 L20 6 Z"/><circle cx="22.5" cy="11.5" r="2.8" fill="#111"/><rect x="15" y="15" width="15" height="4" rx="1"/><path d="M15 19 Q22.5 30 30 19 L30 31 Q22.5 37 15 31 Z"/><rect x="13" y="31" width="19" height="4.5" rx="1.2"/><rect x="11.5" y="36" width="22" height="4" rx="1"/></g></svg>`,
+        bQ: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="bqg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4a4a4a"/><stop offset="100%" stop-color="#1f242b"/></linearGradient></defs><g fill="url(#bqg)" stroke="#111" stroke-width="1.1"><circle cx="22.5" cy="8" r="3.5"/><circle cx="13" cy="11" r="2.5"/><circle cx="32" cy="11" r="2.5"/><circle cx="8" cy="17" r="2"/><circle cx="37" cy="17" r="2"/><path d="M15 15 Q22.5 28 30 15 L30 30 Q22.5 36 15 30 Z"/><rect x="12.5" y="30.5" width="20" height="4.2" rx="1"/><rect x="10.5" y="35.5" width="24" height="4.5" rx="1.2"/></g></svg>`,
+        bR: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="brg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4a4a4a"/><stop offset="100%" stop-color="#1f242b"/></linearGradient></defs><g fill="url(#brg)" stroke="#111" stroke-width="1.1"><rect x="11" y="7" width="23" height="7" rx="1.5"/><rect x="13" y="14" width="19" height="5"/><path d="M12 19 L33 19 L33 30 Q22.5 34 12 30 Z"/><rect x="10" y="30" width="25" height="4.5" rx="1"/><rect x="9" y="35" width="27" height="4.5" rx="1.2"/></g></svg>`,
+        bB: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="bbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4a4a4a"/><stop offset="100%" stop-color="#1f242b"/></linearGradient></defs><g fill="url(#bbg)" stroke="#111" stroke-width="1"><circle cx="22.5" cy="8" r="4"/><path d="M15.5 15 Q22.5 26 29.5 15 L29.5 29 Q22.5 35 15.5 29 Z"/><rect x="13" y="29" width="19" height="4" rx="1"/><rect x="11.5" y="34" width="22" height="4.5" rx="1"/></g></svg>`,
+        bN: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="bng" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4a4a4a"/><stop offset="100%" stop-color="#1f242b"/></linearGradient></defs><g fill="url(#bng)" stroke="#111" stroke-width="1"><path d="M14 28 Q12 14 22 10 Q31 14 30 27 Q25 33 19 30 Z"/><circle cx="27" cy="13" r="3.5"/><rect x="13" y="29" width="20" height="4" rx="1"/><rect x="11" y="34.5" width="23" height="4" rx="1.1"/></g></svg>`,
+        bP: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="bpg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4a4a4a"/><stop offset="100%" stop-color="#1f242b"/></linearGradient></defs><g fill="url(#bpg)" stroke="#111" stroke-width="1"><circle cx="22.5" cy="12" r="5.5"/><path d="M15 19 Q22.5 27 30 19 L30 28 Q22.5 33 15 28 Z"/><rect x="13" y="28" width="19" height="4.5" rx="1"/><rect x="11.5" y="33.5" width="22" height="4.5" rx="1"/></g></svg>`
+      },
+      modern: {
+        // Phiên bản tối giản, hiện đại hơn với hình khối rõ ràng và gradient mượt
+        wK: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="mwk" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f1e7d0"/><stop offset="100%" stop-color="#c9b38a"/></linearGradient></defs><g fill="url(#mwk)" stroke="#463e2f" stroke-width="1"><path d="M22.5 7 L27 12 L24 12 L24 16 L21 16 L21 12 L18 12 Z"/><circle cx="22.5" cy="19" r="7"/><rect x="13" y="26" width="19" height="4.5" rx="2"/><rect x="11" y="32" width="23" height="5" rx="2"/></g></svg>`,
+        wQ: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="mwq" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f1e7d0"/><stop offset="100%" stop-color="#c9b38a"/></linearGradient></defs><g fill="url(#mwq)" stroke="#463e2f" stroke-width="1"><circle cx="22.5" cy="9" r="4.5"/><path d="M10 15 L17 13 L22.5 20 L28 13 L35 15 L32 27 Q22.5 33 13 27 Z"/><rect x="12" y="27" width="21" height="4.5" rx="2"/><rect x="10" y="33" width="25" height="5" rx="2"/></g></svg>`,
+        wR: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="mwr" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f1e7d0"/><stop offset="100%" stop-color="#c9b38a"/></linearGradient></defs><g fill="url(#mwr)" stroke="#463e2f" stroke-width="1"><rect x="10" y="7" width="25" height="6" rx="1"/><rect x="13" y="14" width="19" height="4"/><rect x="12" y="19" width="21" height="10" rx="1"/><rect x="10" y="30" width="25" height="4.5" rx="1"/><rect x="9" y="35.5" width="27" height="4" rx="1"/></g></svg>`,
+        wB: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="mwb" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f1e7d0"/><stop offset="100%" stop-color="#c9b38a"/></linearGradient></defs><g fill="url(#mwb)" stroke="#463e2f" stroke-width="1"><circle cx="22.5" cy="10" r="5.5"/><path d="M15 17 Q22.5 29 30 17 L30 28 Q22.5 34 15 28 Z"/><rect x="12.5" y="28" width="20" height="4" rx="2"/><rect x="11" y="33.5" width="23" height="4.5" rx="1.5"/></g></svg>`,
+        wN: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="mwn" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f1e7d0"/><stop offset="100%" stop-color="#c9b38a"/></linearGradient></defs><g fill="url(#mwn)" stroke="#463e2f" stroke-width="1"><path d="M13 30 Q12 16 21 11 Q30 16 31 29 Q26 35 19 31 Z"/><ellipse cx="27" cy="15" rx="4" ry="3.5"/><rect x="12" y="31" width="21" height="3.5" rx="1"/><rect x="10.5" y="35.5" width="24" height="4" rx="1"/></g></svg>`,
+        wP: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="mwp" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f1e7d0"/><stop offset="100%" stop-color="#c9b38a"/></linearGradient></defs><g fill="url(#mwp)" stroke="#463e2f" stroke-width="1"><circle cx="22.5" cy="13" r="6"/><rect x="14" y="20" width="17" height="8" rx="2"/><rect x="12" y="29" width="21" height="4" rx="1.5"/><rect x="11" y="34" width="23" height="4.5" rx="1.5"/></g></svg>`,
+        
+        bK: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="mbk" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#41454f"/><stop offset="100%" stop-color="#1c2129"/></linearGradient></defs><g fill="url(#mbk)" stroke="#0f1218" stroke-width="1.2"><path d="M22.5 7 L27 12 L24 12 L24 16 L21 16 L21 12 L18 12 Z"/><circle cx="22.5" cy="19" r="7"/><rect x="13" y="26" width="19" height="4.5" rx="2"/><rect x="11" y="32" width="23" height="5" rx="2"/></g></svg>`,
+        bQ: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="mbq" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#41454f"/><stop offset="100%" stop-color="#1c2129"/></linearGradient></defs><g fill="url(#mbq)" stroke="#0f1218" stroke-width="1"><circle cx="22.5" cy="9" r="4.5"/><path d="M10 15 L17 13 L22.5 20 L28 13 L35 15 L32 27 Q22.5 33 13 27 Z"/><rect x="12" y="27" width="21" height="4.5" rx="2"/><rect x="10" y="33" width="25" height="5" rx="2"/></g></svg>`,
+        bR: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="mbr" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#41454f"/><stop offset="100%" stop-color="#1c2129"/></linearGradient></defs><g fill="url(#mbr)" stroke="#0f1218" stroke-width="1"><rect x="10" y="7" width="25" height="6" rx="1"/><rect x="13" y="14" width="19" height="4"/><rect x="12" y="19" width="21" height="10" rx="1"/><rect x="10" y="30" width="25" height="4.5" rx="1"/><rect x="9" y="35.5" width="27" height="4" rx="1"/></g></svg>`,
+        bB: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="mbb" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#41454f"/><stop offset="100%" stop-color="#1c2129"/></linearGradient></defs><g fill="url(#mbb)" stroke="#0f1218" stroke-width="1"><circle cx="22.5" cy="10" r="5.5"/><path d="M15 17 Q22.5 29 30 17 L30 28 Q22.5 34 15 28 Z"/><rect x="12.5" y="28" width="20" height="4" rx="2"/><rect x="11" y="33.5" width="23" height="4.5" rx="1.5"/></g></svg>`,
+        bN: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="mbn" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#41454f"/><stop offset="100%" stop-color="#1c2129"/></linearGradient></defs><g fill="url(#mbn)" stroke="#0f1218" stroke-width="1"><path d="M13 30 Q12 16 21 11 Q30 16 31 29 Q26 35 19 31 Z"/><ellipse cx="27" cy="15" rx="4" ry="3.5"/><rect x="12" y="31" width="21" height="3.5" rx="1"/><rect x="10.5" y="35.5" width="24" height="4" rx="1"/></g></svg>`,
+        bP: `<svg viewBox="0 0 45 45" width="100%" height="100%"><defs><linearGradient id="mbp" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#41454f"/><stop offset="100%" stop-color="#1c2129"/></linearGradient></defs><g fill="url(#mbp)" stroke="#0f1218" stroke-width="1"><circle cx="22.5" cy="13" r="6"/><rect x="14" y="20" width="17" height="8" rx="2"/><rect x="12" y="29" width="21" height="4" rx="1.5"/><rect x="11" y="34" width="23" height="4.5" rx="1.5"/></g></svg>`
+      }
+    };
+    
+    function getPieceSVG(color, type) {
+      const key = color + type.toUpperCase();
+      const style = PIECE_SVGS[currentPieceStyle] || PIECE_SVGS.classic;
+      return style[key] || '';
+    }
+    
+    // ========================================================================
+    // ====================== ELO RATING SYSTEM ===============================
+    // ========================================================================
+    /*
+      === CÔNG THỨC ELO (CHUẨN QUỐC TẾ) ===
+      
+      Expected score của người A:
+        Ea = 1 / (1 + 10 ^ ((Rb - Ra) / 400))
+      
+      Điểm thực tế (Sa):
+        Win = 1.0
+        Draw = 0.5
+        Loss = 0.0
+      
+      K-factor (hệ số thay đổi):
+        - Người mới: thường dùng K=40
+        - Trung bình: K=32 (chúng ta dùng 32 cho đơn giản)
+        - Cao thủ: K=16
+      
+      Công thức cập nhật:
+        Ra' = Ra + K * (Sa - Ea)
+        Rb' = Rb + K * (Sb - Eb)     (Sb = 1 - Sa, Eb = 1 - Ea)
+      
+      Trong code:
+        - Tính cho cả 2 người chơi.
+        - Làm tròn về số nguyên.
+        - Giới hạn sàn 100 ELO để tránh âm.
+    */
+    function calculateElo(ratingA, ratingB, scoreA, k = 32) {
+      const expectedA = 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
+      const expectedB = 1 - expectedA;
+      
+      const scoreB = 1 - scoreA;
+      
+      let newA = Math.round(ratingA + k * (scoreA - expectedA));
+      let newB = Math.round(ratingB + k * (scoreB - expectedB));
+      
+      // Sàn ELO
+      newA = Math.max(100, newA);
+      newB = Math.max(100, newB);
+      
+      return { newA, newB, deltaA: newA - ratingA, deltaB: newB - ratingB };
+    }
+    
+    // ========================================================================
+    // ====================== SOUND (PREMIUM WEB AUDIO) =======================
+    // ========================================================================
+    
+    let audioCtx = null;
+    
+    function initAudio() {
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      } catch (e) {}
+    }
+    
+    function playSound(type) {
+      if (!soundEnabled || !audioCtx) return;
+      
+      try {
+        const oscillator = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        const filter = audioCtx.createBiquadFilter();
+        
+        if (type === 'move') {
+          oscillator.type = 'sine';
+          oscillator.frequency.value = 680;
+          gain.gain.value = 0.18;
+          filter.type = 'lowpass';
+          filter.frequency.value = 1400;
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.18);
+        } 
+        else if (type === 'capture') {
+          oscillator.type = 'sawtooth';
+          oscillator.frequency.value = 420;
+          gain.gain.value = 0.22;
+          filter.type = 'lowpass';
+          filter.frequency.value = 900;
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.32);
+        } 
+        else if (type === 'check') {
+          oscillator.type = 'square';
+          oscillator.frequency.value = 920;
+          gain.gain.value = 0.12;
+          filter.type = 'bandpass';
+          filter.frequency.value = 1100;
+          filter.Q.value = 4;
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.55);
+        } 
+        else if (type === 'win') {
+          oscillator.type = 'sine';
+          oscillator.frequency.value = 780;
+          gain.gain.value = 0.3;
+          setTimeout(() => {
+            if (audioCtx) {
+              const o2 = audioCtx.createOscillator();
+              const g2 = audioCtx.createGain();
+              o2.type = 'sine'; o2.frequency.value = 1050;
+              g2.gain.value = 0.25;
+              g2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.8);
+              o2.connect(g2); g2.connect(audioCtx.destination);
+              o2.start(); o2.stop(audioCtx.currentTime + 1.1);
+            }
+          }, 180);
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.9);
+        } 
+        else if (type === 'lose') {
+          oscillator.type = 'sawtooth';
+          oscillator.frequency.value = 220;
+          gain.gain.value = 0.22;
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.7);
+        } 
+        else if (type === 'draw') {
+          oscillator.type = 'triangle';
+          oscillator.frequency.value = 520;
+          gain.gain.value = 0.2;
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.6);
+        } 
+        else {
+          oscillator.type = 'sine';
+          oscillator.frequency.value = 600;
+          gain.gain.value = 0.1;
+          gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+        }
+        
+        oscillator.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + (type === 'win' || type === 'lose' ? 1.2 : 0.6));
+      } catch (e) {}
+    }
+    
+    function toggleSound() {
+      soundEnabled = document.getElementById('sound-toggle').checked;
+      localStorage.setItem('chess_sound', soundEnabled);
+    }
+    
+    // ========================================================================
+    // ====================== BOARD RENDERING & INTERACTION ===================
+    // ========================================================================
+    
+    function renderBoard(chessInstance, containerId = 'chessboard', isReplay = false) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      
+      container.innerHTML = '';
+      container.style.gridTemplateColumns = 'repeat(8, 1fr)';
+      
+      const boardTheme = BOARD_THEMES[currentBoardTheme];
+      const isFlipped = !isWhite && !isReplay;   // Đảo bàn khi chơi đen (trừ replay)
+      
+      const squares = chessInstance.board();
+      
+      for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+          const displayRow = isFlipped ? 7 - row : row;
+          const displayCol = isFlipped ? 7 - col : col;
+          
+          const piece = squares[displayRow][displayCol];
+          const squareName = String.fromCharCode(97 + col) + (8 - row); // a1-h8
+          
+          const square = document.createElement('div');
+          square.className = `square aspect-square flex items-center justify-center relative 
+            ${(row + col) % 2 === 0 ? 'light' : 'dark'} ${boardTheme.class || ''}`;
+          square.dataset.square = squareName;
+          
+          // Highlight last move
+          if (gameHistory.length > 0) {
+            const last = gameHistory[gameHistory.length - 1];
+            if (last.from === squareName || last.to === squareName) {
+              square.classList.add('last-move');
+            }
+          }
+          
+          // Check highlight
+          if (chessInstance.in_check()) {
+            const kingPos = findKingPosition(chessInstance, chessInstance.turn());
+            if (kingPos === squareName) {
+              square.classList.add('in-check');
+            }
+          }
+          
+          // Piece
+          if (piece) {
+            const pieceEl = document.createElement('div');
+            pieceEl.className = `chess-piece ${isReplay ? '' : 'cursor-grab active:cursor-grabbing'}`;
+            pieceEl.innerHTML = getPieceSVG(piece.color, piece.type);
+            pieceEl.draggable = !isReplay;
+            
+            // Drag & Drop (chỉ khi không phải replay)
+            if (!isReplay) {
+              pieceEl.addEventListener('dragstart', (e) => handleDragStart(e, squareName, pieceEl));
+              pieceEl.addEventListener('dragend', handleDragEnd);
+            }
+            
+            square.appendChild(pieceEl);
+          }
+          
+          // Click handlers
+          if (!isReplay) {
+            square.addEventListener('click', () => handleSquareClick(squareName));
+            
+            // Drop target
+            square.addEventListener('dragover', (e) => {
+              e.preventDefault();
+              square.classList.add('ring-2', 'ring-amber-400/60');
+            });
+            square.addEventListener('dragleave', () => square.classList.remove('ring-2', 'ring-amber-400/60'));
+            square.addEventListener('drop', (e) => handleDrop(e, squareName));
+          }
+          
+          container.appendChild(square);
+        }
+      }
+      
+      // Re-apply possible moves highlight if a piece is selected
+      if (selectedSquare && !isReplay) {
+        highlightPossibleMoves(selectedSquare, chessInstance, container);
+      }
+      
+      // Touch friendly: long press not needed, click works great on mobile too
+    }
+    
+    function findKingPosition(chessInstance, color) {
+      const board = chessInstance.board();
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const p = board[r][c];
+          if (p && p.type === 'k' && p.color === color) {
+            return String.fromCharCode(97 + c) + (8 - r);
+          }
+        }
+      }
+      return null;
+    }
+    
+    let dragSource = null;
+    
+    function handleDragStart(e, square, pieceEl) {
+      if (!gameActive || aiThinking) return;
+      dragSource = square;
+      e.dataTransfer.setData('text/plain', square);
+      pieceEl.classList.add('dragging');
+      selectedSquare = square;
+      highlightPossibleMoves(square, chess, document.getElementById('chessboard'));
+    }
+    
+    function handleDragEnd(e) {
+      const board = document.getElementById('chessboard');
+      board.querySelectorAll('.square').forEach(sq => sq.classList.remove('ring-2', 'ring-amber-400/60'));
+      if (e.target) e.target.classList.remove('dragging');
+      dragSource = null;
+    }
+    
+    function handleDrop(e, targetSquare) {
+      e.preventDefault();
+      const board = document.getElementById('chessboard');
+      board.querySelectorAll('.square').forEach(sq => sq.classList.remove('ring-2', 'ring-amber-400/60'));
+      
+      if (!dragSource || dragSource === targetSquare) {
+        clearSelection();
+        return;
+      }
+      
+      attemptMove(dragSource, targetSquare);
+      dragSource = null;
+      clearSelection();
+    }
+    
+    function handleSquareClick(squareName) {
+      if (!gameActive || aiThinking) return;
+      
+      const piece = chess.get(squareName);
+      
+      if (selectedSquare) {
+        if (selectedSquare === squareName) {
+          // Deselect
+          clearSelection();
+        } else {
+          // Try to move
+          const success = attemptMove(selectedSquare, squareName);
+          if (!success) {
+            // If clicked another of own pieces, select it instead
+            if (piece && piece.color === (isWhite ? 'w' : 'b')) {
+              clearSelection();
+              selectedSquare = squareName;
+              highlightPossibleMoves(squareName, chess, document.getElementById('chessboard'));
+              renderBoard(chess);
+            } else {
+              clearSelection();
+            }
+          } else {
+            clearSelection();
+          }
+        }
+      } else {
+        // Select piece if it's the current player's
+        if (piece && piece.color === (isWhite ? 'w' : 'b')) {
+          selectedSquare = squareName;
+          highlightPossibleMoves(squareName, chess, document.getElementById('chessboard'));
+          renderBoard(chess);
+        }
+      }
+    }
+    
+    function highlightPossibleMoves(fromSquare, chessInstance, container) {
+      container.querySelectorAll('.square').forEach(sq => {
+        sq.classList.remove('possible-move', 'possible-capture');
+      });
+      
+      const moves = chessInstance.moves({ square: fromSquare, verbose: true });
+      moves.forEach(move => {
+        const targetSq = container.querySelector(`[data-square="${move.to}"]`);
+        if (targetSq) {
+          if (move.captured) {
+            targetSq.classList.add('possible-capture');
+          } else {
+            targetSq.classList.add('possible-move');
+          }
+        }
+      });
+    }
+    
+    function clearSelection() {
+      selectedSquare = null;
+      const board = document.getElementById('chessboard');
+      if (board) {
+        board.querySelectorAll('.square').forEach(sq => {
+          sq.classList.remove('possible-move', 'possible-capture', 'selected', 'ring-2', 'ring-amber-400/60');
+        });
+      }
+    }
+    
+    // ========================================================================
+    // ====================== MOVE HANDLING ===================================
+    // ========================================================================
+    
+    function attemptMove(from, to, promotion = null) {
+      if (!chess || !gameActive) return false;
+      
+      const moveObj = { from, to };
+      if (promotion) moveObj.promotion = promotion;
+      
+      // Validate with chess.js
+      const moveResult = chess.move(moveObj);
+      if (!moveResult) {
+        return false;
+      }
+      
+      // Record move for history
+      gameHistory.push({
+        from: moveResult.from,
+        to: moveResult.to,
+        san: moveResult.san,
+        piece: moveResult.piece,
+        captured: moveResult.captured,
+        promotion: moveResult.promotion,
+        color: moveResult.color
+      });
+      
+      // Update captured pieces
+      if (moveResult.captured) {
+        const capturerColor = moveResult.color;
+        capturedPieces[capturerColor === 'w' ? 'b' : 'w'].push(moveResult.captured);
+      }
+      
+      // Sounds
+      if (moveResult.captured) {
+        playSound('capture');
+      } else {
+        playSound('move');
+      }
+      
+      // Check
+      if (chess.in_check()) {
+        playSound('check');
+      }
+      
+      // Render
+      renderBoard(chess);
+      updateMoveList();
+      updateCapturedPieces();
+      
+      // Check game end
+      if (checkGameEnd()) {
+        return true;
+      }
+      
+      // Update clocks
+      switchTurnAndSyncClocks();
+      
+      // Online sync
+      if (currentMode === 'online' && currentRoomCode) {
+        syncMoveToFirestore(moveResult);
+      }
+      
+      // AI move
+      if (currentMode === 'ai' && chess.turn() !== (isWhite ? 'w' : 'b')) {
+        setTimeout(makeAIMove, 380);
+      }
+      
+      return true;
+    }
+    
+    function switchTurnAndSyncClocks() {
+      const now = Date.now();
+      const elapsed = now - lastMoveTimestamp;
+      lastMoveTimestamp = now;
+      
+      // Apply increment to the player who just moved
+      if (chess.turn() === 'b') {
+        // White just moved
+        playerTime = Math.max(0, playerTime - elapsed + increment);
+      } else {
+        // Black just moved
+        opponentTime = Math.max(0, opponentTime - elapsed + increment);
+      }
+      
+      updateClocks();
+      startTimers();
+    }
+    
+    function startTimers() {
+      if (timerInterval) clearInterval(timerInterval);
+      
+      timerInterval = setInterval(() => {
+        if (!gameActive) {
+          clearInterval(timerInterval);
+          return;
+        }
+        
+        const now = Date.now();
+        const elapsed = now - lastMoveTimestamp;
+        
+        if (chess.turn() === (isWhite ? 'w' : 'b')) {
+          // Player's turn
+          const remaining = Math.max(0, playerTime - elapsed);
+          updateClockDisplay('player', remaining);
+          
+          if (remaining <= 0) {
+            endGameByTimeout('player');
+          }
+        } else {
+          const remaining = Math.max(0, opponentTime - elapsed);
+          updateClockDisplay('opponent', remaining);
+          
+          if (remaining <= 0) {
+            endGameByTimeout('opponent');
+          }
+        }
+      }, 250);
+    }
+    
+    function updateClockDisplay(who, ms) {
+      const el = document.getElementById(who === 'player' ? 'player-time' : 'opponent-time');
+      const bar = document.getElementById(who === 'player' ? 'player-time-bar' : 'opponent-time-bar');
+      
+      if (!el || !bar) return;
+      
+      const total = who === 'player' ? playerTime : opponentTime;
+      const pct = Math.max(0, Math.min(100, (ms / total) * 100));
+      bar.style.width = pct + '%';
+      
+      const min = Math.floor(ms / 60000);
+      const sec = Math.floor((ms % 60000) / 1000);
+      el.textContent = `${min}:${sec.toString().padStart(2, '0')}`;
+      
+      // Visual warning
+      if (ms < 30000) {
+        el.classList.add('text-red-400');
+        bar.classList.add('!bg-red-500');
+      } else {
+        el.classList.remove('text-red-400');
+        bar.classList.remove('!bg-red-500');
+      }
+    }
+    
+    function updateClocks() {
+      updateClockDisplay('player', playerTime);
+      updateClockDisplay('opponent', opponentTime);
+    }
+    
+    function endGameByTimeout(loser) {
+      gameActive = false;
+      clearInterval(timerInterval);
+      
+      let result = '';
+      let winnerIsPlayer = false;
+      
+      if (loser === 'player') {
+        result = isWhite ? '0-1' : '1-0';
+        winnerIsPlayer = false;
+      } else {
+        result = isWhite ? '1-0' : '0-1';
+        winnerIsPlayer = true;
+      }
+      
+      const reason = 'Hết giờ';
+      finishGame(result, winnerIsPlayer, reason);
+    }
+    
+    // ========================================================================
+    // ====================== AI ENGINE (Stockfish 17 inspired) ===============
+    // ========================================================================
+    /*
+      Đây là engine AI mạnh được xây dựng bằng JavaScript thuần.
+      
+      Điểm mạnh:
+        • Sử dụng chess.js để sinh nước hợp lệ
+        • Đánh giá chất liệu + vị trí (piece-square tables)
+        • Tìm kiếm Alpha-Beta cắt tỉa
+        • Quiescence search cho các nước ăn
+        • 4 cấp độ độ sâu khác nhau
+      
+      Trong môi trường production, bạn có thể thay thế toàn bộ hàm makeAIMove() 
+      bằng Stockfish 17 WebAssembly thật:
+      
+        1. Tải stockfish.js + stockfish.wasm từ https://stockfishchess.org
+        2. Tạo Web Worker:
+           const sf = new Worker('stockfish-17.js');
+           sf.postMessage('uci');
+           sf.postMessage('setoption name Skill Level value 20');
+           sf.postMessage('position fen ' + chess.fen());
+           sf.postMessage('go depth 18');
+           sf.onmessage = (e) => { if (e.data.startsWith('bestmove')) ... }
+    */
+    
+    const PIECE_VALUES = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
+    
+    // Piece-Square Tables (đơn giản hóa nhưng rất hiệu quả)
+    const PST = {
+      p: [  0,  0,  0,  0,  0,  0,  0,  0,
+           50, 50, 50, 50, 50, 50, 50, 50,
+           10, 10, 20, 30, 30, 20, 10, 10,
+            5,  5, 10, 25, 25, 10,  5,  5,
+            0,  0,  0, 20, 20,  0,  0,  0,
+            5, -5,-10,  0,  0,-10, -5,  5,
+            5, 10, 10,-20,-20, 10, 10,  5,
+            0,  0,  0,  0,  0,  0,  0,  0 ],
+      n: [ -50,-40,-30,-30,-30,-30,-40,-50,
+           -40,-20,  0,  0,  0,  0,-20,-40,
+           -30,  0, 10, 15, 15, 10,  0,-30,
+           -30,  5, 15, 20, 20, 15,  5,-30,
+           -30,  0, 15, 20, 20, 15,  0,-30,
+           -30,  5, 10, 15, 15, 10,  5,-30,
+           -40,-20,  0,  5,  5,  0,-20,-40,
+           -50,-40,-30,-30,-30,-30,-40,-50 ],
+      b: [ -20,-10,-10,-10,-10,-10,-10,-20,
+           -10,  0,  0,  0,  0,  0,  0,-10,
+           -10,  0,  5, 10, 10,  5,  0,-10,
+           -10,  5,  5, 10, 10,  5,  5,-10,
+           -10,  0, 10, 10, 10, 10,  0,-10,
+           -10, 10, 10, 10, 10, 10, 10,-10,
+           -10,  5,  0,  0,  0,  0,  5,-10,
+           -20,-10,-10,-10,-10,-10,-10,-20 ],
+      r: [   0,  0,  0,  0,  0,  0,  0,  0,
+             5, 10, 10, 10, 10, 10, 10,  5,
+            -5,  0,  0,  0,  0,  0,  0, -5,
+            -5,  0,  0,  0,  0,  0,  0, -5,
+            -5,  0,  0,  0,  0,  0,  0, -5,
+            -5,  0,  0,  0,  0,  0,  0, -5,
+            -5,  0,  0,  0,  0,  0,  0, -5,
+             0,  0,  0,  5,  5,  0,  0,  0 ],
+      q: [ -20,-10,-10, -5, -5,-10,-10,-20,
+           -10,  0,  0,  0,  0,  0,  0,-10,
+           -10,  0,  5,  5,  5,  5,  0,-10,
+            -5,  0,  5,  5,  5,  5,  0, -5,
+             0,  0,  5,  5,  5,  5,  0, -5,
+           -10,  5,  5,  5,  5,  5,  0,-10,
+           -10,  0,  5,  0,  0,  0,  0,-10,
+           -20,-10,-10, -5, -5,-10,-10,-20 ],
+      k: [ -30,-40,-40,-50,-50,-40,-40,-30,
+           -30,-40,-40,-50,-50,-40,-40,-30,
+           -30,-40,-40,-50,-50,-40,-40,-30,
+           -30,-40,-40,-50,-50,-40,-40,-30,
+           -20,-30,-30,-40,-40,-30,-30,-20,
+           -10,-20,-20,-20,-20,-20,-20,-10,
+            20, 20,  0,  0,  0,  0, 20, 20,
+            20, 30, 10,  0,  0, 10, 30, 20 ]
+    };
+    
+    function evaluate(chessInstance) {
+      let score = 0;
+      const board = chessInstance.board();
+      
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+          const piece = board[r][c];
+          if (!piece) continue;
+          
+          const val = PIECE_VALUES[piece.type];
+          let pstVal = 0;
+          
+          const idx = piece.color === 'w' ? (r * 8 + c) : ((7 - r) * 8 + (7 - c));
+          if (PST[piece.type]) pstVal = PST[piece.type][idx];
+          
+          const side = piece.color === 'w' ? 1 : -1;
+          score += side * (val + pstVal);
+        }
+      }
+      
+      // Bonus nhỏ cho khả năng di chuyển
+      const moves = chessInstance.moves().length;
+      score += (chessInstance.turn() === 'w' ? 1 : -1) * moves * 0.8;
+      
+      return score;
+    }
+    
+    function minimax(chessInstance, depth, alpha, beta, isMaximizing) {
+      if (depth === 0) {
+        return quiescence(chessInstance, alpha, beta, isMaximizing);
+      }
+      
+      const moves = chessInstance.moves({ verbose: true });
+      
+      if (moves.length === 0) {
+        if (chessInstance.in_check()) {
+          return isMaximizing ? -99999 : 99999;
+        }
+        return 0; // stalemate
+      }
+      
+      if (isMaximizing) {
+        let maxEval = -Infinity;
+        for (let move of moves) {
+          chessInstance.move(move);
+          const evalScore = minimax(chessInstance, depth - 1, alpha, beta, false);
+          chessInstance.undo();
+          maxEval = Math.max(maxEval, evalScore);
+          alpha = Math.max(alpha, evalScore);
+          if (beta <= alpha) break;
+        }
+        return maxEval;
+      } else {
+        let minEval = Infinity;
+        for (let move of moves) {
+          chessInstance.move(move);
+          const evalScore = minimax(chessInstance, depth - 1, alpha, beta, true);
+          chessInstance.undo();
+          minEval = Math.min(minEval, evalScore);
+          beta = Math.min(beta, evalScore);
+          if (beta <= alpha) break;
+        }
+        return minEval;
+      }
+    }
+    
+    function quiescence(chessInstance, alpha, beta, isMaximizing) {
+      let standPat = evaluate(chessInstance);
+      
+      if (isMaximizing) {
+        if (standPat >= beta) return beta;
+        alpha = Math.max(alpha, standPat);
+      } else {
+        if (standPat <= alpha) return alpha;
+        beta = Math.min(beta, standPat);
+      }
+      
+      const captures = chessInstance.moves({ verbose: true }).filter(m => m.captured);
+      
+      for (let move of captures) {
+        chessInstance.move(move);
+        const score = quiescence(chessInstance, alpha, beta, !isMaximizing);
+        chessInstance.undo();
+        
+        if (isMaximizing) {
+          if (score >= beta) return beta;
+          alpha = Math.max(alpha, score);
+        } else {
+          if (score <= alpha) return alpha;
+          beta = Math.min(beta, score);
+        }
+      }
+      return isMaximizing ? alpha : beta;
+    }
+    
+    function getBestMove(chessInstance, difficulty) {
+      const depthMap = { 1: 1, 2: 2, 3: 3, 4: 4 };
+      const depth = depthMap[difficulty] || 2;
+      
+      let bestMove = null;
+      let bestValue = -Infinity;
+      
+      const moves = chessInstance.moves({ verbose: true });
+      
+      // Shuffle để đa dạng nước đi
+      for (let i = moves.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [moves[i], moves[j]] = [moves[j], moves[i]];
+      }
+      
+      const isWhiteTurn = chessInstance.turn() === 'w';
+      
+      for (let move of moves) {
+        chessInstance.move(move);
+        const value = minimax(chessInstance, depth - 1, -Infinity, Infinity, !isWhiteTurn);
+        chessInstance.undo();
+        
+        if (value > bestValue) {
+          bestValue = value;
+          bestMove = move;
+        }
+      }
+      
+      // Fallback: nước ngẫu nhiên hợp lệ
+      if (!bestMove && moves.length > 0) {
+        bestMove = moves[Math.floor(Math.random() * moves.length)];
+      }
+      return bestMove;
+    }
+    
+    async function makeAIMove() {
+      if (!gameActive || !chess || chess.turn() === (isWhite ? 'w' : 'b')) return;
+      
+      aiThinking = true;
+      document.getElementById('ai-thinking').classList.remove('hidden');
+      
+      // "Suy nghĩ" một chút tùy độ khó
+      const thinkTime = [180, 420, 850, 1350][currentDifficulty - 1] || 600;
+      
+      await new Promise(res => setTimeout(res, thinkTime));
+      
+      if (!gameActive) {
+        aiThinking = false;
+        document.getElementById('ai-thinking').classList.add('hidden');
+        return;
+      }
+      
+      const best = getBestMove(chess, currentDifficulty);
+      
+      aiThinking = false;
+      document.getElementById('ai-thinking').classList.add('hidden');
+      
+      if (best) {
+        const success = attemptMove(best.from, best.to, best.promotion);
+        if (!success) {
+          // Fallback an toàn
+          const legal = chess.moves({ verbose: true })[0];
+          if (legal) attemptMove(legal.from, legal.to, legal.promotion);
+        }
+      }
+    }
+    
+    // ========================================================================
+    // ====================== GAME FLOW (START / END) =========================
+    // ========================================================================
+    
+    function startAIGame(difficulty) {
+      if (!currentUser && !confirmGuestMode()) return;
+      
+      resetGameState();
+      currentMode = 'ai';
+      currentDifficulty = difficulty;
+      isWhite = true; // Người chơi luôn trắng vs máy
+      
+      chess = new Chess();
+      gameHistory = [];
+      capturedPieces = { w: [], b: [] };
+      
+      // Thời gian
+      playerTime = 600000;
+      opponentTime = 600000;
+      lastMoveTimestamp = Date.now();
+      
+      // Meta
+      const aiRatings = [900, 1200, 1500, 1800];
+      currentGameMeta = {
+        mode: 'ai',
+        difficulty,
+        opponent: { name: `Máy (Cấp ${difficulty})`, rating: aiRatings[difficulty - 1] },
+        startTime: Date.now()
+      };
+      
+      switchView('game');
+      document.getElementById('game-mode-label').innerHTML = `<i class="fa-solid fa-robot mr-1.5"></i>CHƠI VỚI MÁY • Cấp ${difficulty}`;
+      document.getElementById('game-status-text').textContent = 'Bạn cầm quân trắng';
+      
+      setupPlayerCards(true, {
+        name: currentUser ? currentUser.username : 'Khách',
+        avatar: currentUser ? currentUser.avatar : null,
+        elo: currentUser ? currentUser.elo : guestElo
+      }, {
+        name: `Máy Cấp ${difficulty}`,
+        avatar: null,
+        elo: aiRatings[difficulty - 1]
+      });
+      
+      renderBoard(chess);
+      updateMoveList();
+      updateCapturedPieces();
+      updateClocks();
+      startTimers();
+      gameActive = true;
+      
+      // Lưu lịch sử cục bộ ngay khi bắt đầu (để có bản nháp)
+      saveLocalDraft();
+    }
+    
+    function startLocal2PGame() {
+      resetGameState();
+      currentMode = 'local';
+      isWhite = true; // Người chơi 1 (trắng) bắt đầu
+      
+      chess = new Chess();
+      gameHistory = [];
+      capturedPieces = { w: [], b: [] };
+      
+      playerTime = 600000;
+      opponentTime = 600000;
+      lastMoveTimestamp = Date.now();
+      
+      currentGameMeta = {
+        mode: 'local',
+        startTime: Date.now(),
+        opponent: { name: 'Người chơi 2', rating: null }
+      };
+      
+      switchView('game');
+      document.getElementById('game-mode-label').innerHTML = `<i class="fa-solid fa-users mr-1.5"></i>CHƠI 2 NGƯỜI CÙNG THIẾT BỊ`;
+      document.getElementById('game-status-text').textContent = 'Người 1 (Trắng) bắt đầu';
+      
+      setupPlayerCards(true, {
+        name: currentUser ? currentUser.username : 'Người 1',
+        avatar: currentUser ? currentUser.avatar : null,
+        elo: currentUser ? currentUser.elo : guestElo
+      }, {
+        name: 'Người 2',
+        avatar: null,
+        elo: null
+      });
+      
+      renderBoard(chess);
+      updateMoveList();
+      updateCapturedPieces();
+      updateClocks();
+      startTimers();
+      gameActive = true;
+    }
+    
+    async function createRoomAndStart() {
+      if (!auth || !db || !currentUser) {
+        showToast('Bạn cần đăng nhập để tạo phòng online', 'error');
+        hideCreateRoomModal();
+        showAuthModal();
+        return;
+      }
+      
+      hideCreateRoomModal();
+      resetGameState();
+      
+      const code = generateRoomCode();
+      currentRoomCode = code;
+      currentMode = 'online';
+      isWhite = true; // Người tạo phòng cầm trắng
+      
+      chess = new Chess();
+      gameHistory = [];
+      capturedPieces = { w: [], b: [] };
+      
+      playerTime = 600000;
+      opponentTime = 600000;
+      lastMoveTimestamp = Date.now();
+      
+      currentGameMeta = {
+        mode: 'online',
+        roomCode: code,
+        startTime: Date.now()
+      };
+      
+      try {
+        // Tạo document phòng
+        await db.collection('rooms').doc(code).set({
+          code,
+          white: {
+            uid: currentUser.uid,
+            name: currentUser.username,
+            avatar: currentUser.avatar,
+            elo: currentUser.elo
+          },
+          black: null,
+          status: 'waiting',
+          moves: [],
+          turn: 'w',
+          whiteTime: 600000,
+          blackTime: 600000,
+          lastMoveTimestamp: Date.now(),
+          result: null,
+          timeControl: { base: 600000, increment: 5000 },
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        
+        switchView('game');
+        document.getElementById('game-mode-label').innerHTML = `<i class="fa-solid fa-globe mr-1.5"></i>PHÒNG: ${code}`;
+        document.getElementById('game-status-text').textContent = 'Đang chờ đối thủ...';
+        
+        setupPlayerCards(true, currentUser, { name: 'Đang chờ...', avatar: null, elo: null });
+        
+        renderBoard(chess);
+        updateClocks();
+        
+        // Lắng nghe phòng
+        listenToRoom(code);
+        
+        showToast('Phòng đã tạo. Chia sẻ mã cho đối thủ.', 'success');
+      } catch (err) {
+        console.error(err);
+        showToast('Không thể tạo phòng. Kiểm tra kết nối Firestore.', 'error');
+      }
+    }
+    
+    async function joinRoomByCode() {
+      const input = document.getElementById('join-code-input').value.trim().toUpperCase();
+      hideJoinRoomModal();
+      
+      if (!input || !auth || !db || !currentUser) {
+        showToast('Vui lòng đăng nhập và nhập mã phòng hợp lệ', 'error');
+        return;
+      }
+      
+      await joinRoom(input);
+    }
+    
+    async function joinRoom(code) {
+      if (!db || !currentUser) return;
+      
+      try {
+        const roomRef = db.collection('rooms').doc(code);
+        const snap = await roomRef.get();
+        
+        if (!snap.exists) {
+          showToast('Không tìm thấy phòng', 'error');
+          return;
+        }
+        
+        const data = snap.data();
+        
+        if (data.status !== 'waiting' || data.black) {
+          showToast('Phòng đã có người chơi hoặc đã bắt đầu', 'error');
+          return;
+        }
+        
+        // Tham gia làm đen
+        await roomRef.update({
+          black: {
+            uid: currentUser.uid,
+            name: currentUser.username,
+            avatar: currentUser.avatar,
+            elo: currentUser.elo
+          },
+          status: 'playing'
+        });
+        
+        resetGameState();
+        currentRoomCode = code;
+        currentMode = 'online';
+        isWhite = false; // Người tham gia cầm đen
+        
+        chess = new Chess();
+        gameHistory = [];
+        capturedPieces = { w: [], b: [] };
+        
+        playerTime = data.whiteTime || 600000;
+        opponentTime = data.blackTime || 600000;
+        
+        currentGameMeta = { mode: 'online', roomCode: code, startTime: Date.now() };
+        
+        switchView('game');
+        document.getElementById('game-mode-label').innerHTML = `<i class="fa-solid fa-globe mr-1.5"></i>PHÒNG: ${code}`;
+        document.getElementById('game-status-text').textContent = 'Đang chơi';
+        
+        setupPlayerCards(true, currentUser, data.white);
+        
+        renderBoard(chess);
+        updateClocks();
+        
+        listenToRoom(code);
+        
+        showToast('Đã tham gia phòng thành công!', 'success');
+      } catch (err) {
+        console.error(err);
+        showToast('Lỗi khi tham gia phòng', 'error');
+      }
+    }
+    
+    async function startQuickMatch() {
+      if (!auth || !db || !currentUser) {
+        showToast('Đăng nhập để sử dụng tính năng tìm trận nhanh', 'error');
+        showAuthModal();
+        return;
+      }
+      
+      const overlay = document.createElement('div');
+      overlay.id = 'matchmaking-overlay';
+      overlay.className = 'fixed inset-0 bg-black/90 z-[110] flex items-center justify-center';
+      overlay.innerHTML = `
+        <div class="text-center">
+          <div class="mx-auto w-16 h-16 border-4 border-sky-400 border-t-transparent rounded-full animate-spin mb-6"></div>
+          <div class="text-2xl font-semibold tracking-tight">Đang tìm đối thủ...</div>
+          <div id="matchmaking-status" class="text-sky-300 mt-2">Tìm theo ELO ±200</div>
+          <button onclick="cancelQuickMatch()" class="mt-8 px-8 py-2 text-sm border border-slate-400 rounded-2xl hover:bg-white/5">Hủy tìm trận</button>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+      
+      // Thực hiện matchmaking thông minh
+      window._matchmakingActive = true;
+      window._matchmakingRange = 200;
+      
+      const tryFind = async () => {
+        if (!window._matchmakingActive) return;
+        
+        try {
+          const myElo = currentUser.elo;
+          const range = window._matchmakingRange;
+          
+          // Query các phòng đang chờ
+          const snapshot = await db.collection('rooms')
+            .where('status', '==', 'waiting')
+            .where('black', '==', null)
+            .limit(20)
+            .get();
+          
+          let bestRoom = null;
+          let bestDiff = Infinity;
+          
+          snapshot.forEach(doc => {
+            const d = doc.data();
+            if (!d.white || d.white.uid === currentUser.uid) return;
+            
+            const diff = Math.abs((d.white.elo || 1200) - myElo);
+            if (diff <= range && diff < bestDiff) {
+              bestDiff = diff;
+              bestRoom = { id: doc.id, ...d };
+            }
+          });
+          
+          if (bestRoom) {
+            // Tìm thấy
+            cancelQuickMatchUI();
+            await joinRoom(bestRoom.id);
+          } else {
+            // Tự tạo phòng và chờ
+            const code = generateRoomCode();
+            currentRoomCode = code;
+            currentMode = 'online';
+            isWhite = true;
+            
+            await db.collection('rooms').doc(code).set({
+              code,
+              white: {
+                uid: currentUser.uid,
+                name: currentUser.username,
+                avatar: currentUser.avatar,
+                elo: currentUser.elo
+              },
+              black: null,
+              status: 'waiting',
+              moves: [],
+              turn: 'w',
+              whiteTime: 600000,
+              blackTime: 600000,
+              lastMoveTimestamp: Date.now(),
+              result: null,
+              timeControl: { base: 600000, increment: 5000 },
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            
+            cancelQuickMatchUI();
+            resetGameState();
+            chess = new Chess();
+            gameHistory = [];
+            capturedPieces = { w: [], b: [] };
+            playerTime = 600000;
+            opponentTime = 600000;
+            
+            currentGameMeta = { mode: 'online', roomCode: code, startTime: Date.now() };
+            
+            switchView('game');
+            document.getElementById('game-mode-label').innerHTML = `<i class="fa-solid fa-bolt-lightning mr-1.5"></i>TRẬN NHANH • ${code}`;
+            document.getElementById('game-status-text').textContent = 'Đang chờ đối thủ phù hợp...';
+            
+            setupPlayerCards(true, currentUser, { name: 'Đang tìm...', avatar: null, elo: null });
+            renderBoard(chess);
+            updateClocks();
+            
+            listenToRoom(code);
+            
+            // Tự động mở rộng phạm vi tìm kiếm
+            setTimeout(() => {
+              if (window._matchmakingActive === false && currentRoomCode) {
+                // Phòng đã được join thì không cần làm gì
+              }
+            }, 100);
+            
+            // Mở rộng range mỗi 8 giây
+            const expand = setInterval(async () => {
+              if (!window._matchmakingActive || !currentRoomCode) {
+                clearInterval(expand);
+                return;
+              }
+              window._matchmakingRange = Math.min(600, window._matchmakingRange + 80);
+              document.getElementById('matchmaking-status').textContent = `Mở rộng tìm kiếm ±${window._matchmakingRange}`;
+              
+              // Kiểm tra xem có ai join chưa
+              const rs = await db.collection('rooms').doc(currentRoomCode).get();
+              if (rs.exists && rs.data().status === 'playing') {
+                clearInterval(expand);
+              }
+            }, 8000);
+            
+            window._matchmakingExpandInterval = expand;
+          }
+        } catch (e) {
+          console.error(e);
+          cancelQuickMatchUI();
+          showToast('Lỗi khi tìm trận. Vui lòng thử lại.', 'error');
+        }
+      };
+      
+      // Chạy lần đầu
+      setTimeout(tryFind, 650);
+    }
+    
+    function cancelQuickMatch() {
+      window._matchmakingActive = false;
+      if (window._matchmakingExpandInterval) clearInterval(window._matchmakingExpandInterval);
+      
+      // Nếu đã tạo phòng thì xóa phòng chờ
+      if (currentRoomCode && db) {
+        db.collection('rooms').doc(currentRoomCode).delete().catch(() => {});
+      }
+      cancelQuickMatchUI();
+      switchView('menu');
+    }
+    
+    function cancelQuickMatchUI() {
+      const overlay = document.getElementById('matchmaking-overlay');
+      if (overlay) overlay.remove();
+      window._matchmakingActive = false;
+    }
+    
+    function listenToRoom(code) {
+      if (roomUnsubscribe) roomUnsubscribe();
+      if (chatUnsubscribe) chatUnsubscribe();
+      
+      const roomRef = db.collection('rooms').doc(code);
+      
+      roomUnsubscribe = roomRef.onSnapshot(async (snap) => {
+        if (!snap.exists) {
+          showToast('Phòng đã bị xóa', 'error');
+          exitGame(true);
+          return;
+        }
+        
+        const data = snap.data();
+        
+        // Cập nhật thông tin đối thủ
+        const oppData = isWhite ? data.black : data.white;
+        if (oppData) {
+          document.getElementById('opponent-name').textContent = oppData.name || 'Đối thủ';
+          document.getElementById('opponent-elo').textContent = oppData.elo || '—';
+          
+          const av = document.getElementById('opponent-avatar');
+          if (oppData.avatar) {
+            av.innerHTML = `<img src="${oppData.avatar}" class="w-full h-full object-cover">`;
+          } else {
+            av.innerHTML = `<div class="w-full h-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-lg font-semibold">${(oppData.name || 'O')[0]}</div>`;
+          }
+          
+          // Cập nhật trạng thái
+          document.getElementById('game-status-text').textContent = data.status === 'playing' ? 'Đang thi đấu' : 'Đang chờ';
+        }
+        
+        // Đồng bộ nước đi
+        if (data.moves && data.moves.length > 0) {
+          const currentMoveCount = gameHistory.length;
+          if (data.moves.length > currentMoveCount) {
+            // Áp dụng các nước mới
+            const newMoves = data.moves.slice(currentMoveCount);
+            
+            for (let san of newMoves) {
+              const moveResult = chess.move(san);
+              if (moveResult) {
+                gameHistory.push({
+                  from: moveResult.from, to: moveResult.to, san: moveResult.san,
+                  piece: moveResult.piece, captured: moveResult.captured, promotion: moveResult.promotion, color: moveResult.color
+                });
+                
+                if (moveResult.captured) {
+                  capturedPieces[moveResult.color === 'w' ? 'b' : 'w'].push(moveResult.captured);
+                }
+              }
+            }
+            
+            renderBoard(chess);
+            updateMoveList();
+            updateCapturedPieces();
+            
+            // Cập nhật thời gian từ server
+            if (data.whiteTime != null) playerTime = isWhite ? data.whiteTime : data.blackTime;
+            if (data.blackTime != null) opponentTime = isWhite ? data.blackTime : data.whiteTime;
+            
+            updateClocks();
+            
+            // Âm thanh cho nước đối thủ
+            playSound('move');
+            
+            // Kiểm tra kết thúc
+            if (data.result) {
+              gameActive = false;
+              clearInterval(timerInterval);
+              const iWon = (data.result === '1-0' && isWhite) || (data.result === '0-1' && !isWhite);
+              showGameResult(data.result, iWon, 'Kết thúc');
+            }
+          }
+        }
+        
+        // Xử lý kết thúc từ phía đối thủ
+        if (data.status === 'finished' && data.result && gameActive) {
+          gameActive = false;
+          clearInterval(timerInterval);
+          const iWon = (data.result === '1-0' && isWhite) || (data.result === '0-1' && !isWhite);
+          showGameResult(data.result, iWon, 'Đối thủ đã kết thúc');
+        }
+        
+        // Clock sync khi có thay đổi
+        if (data.lastMoveTimestamp) {
+          lastMoveTimestamp = data.lastMoveTimestamp;
+        }
+      }, (err) => {
+        console.error('Room listener error', err);
+      });
+      
+      // Chat listener
+      chatUnsubscribe = roomRef.collection('chat')
+        .orderBy('timestamp', 'asc')
+        .onSnapshot((snap) => {
+          const container = document.getElementById('chat-messages');
+          if (!container) return;
+          
+          container.innerHTML = '';
+          snap.forEach(doc => {
+            const msg = doc.data();
+            const isSelf = msg.uid === (currentUser ? currentUser.uid : '');
+            
+            const div = document.createElement('div');
+            div.className = `flex gap-2 ${isSelf ? 'justify-end' : ''}`;
+            
+            div.innerHTML = `
+              ${!isSelf ? `<div class="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 mt-0.5 ring-1 ring-white/20">${msg.avatar ? `<img src="${msg.avatar}" class="w-full h-full object-cover">` : `<div class="w-full h-full bg-slate-700 flex items-center justify-center text-[9px]">${(msg.name||'')[0]}</div>`}</div>` : ''}
+              <div class="max-w-[72%]">
+                <div class="message-bubble ${isSelf ? 'self' : 'opponent'}">
+                  ${escapeHtml(msg.text)}
+                </div>
+                <div class="text-[10px] text-slate-500 mt-px px-1 ${isSelf ? 'text-right' : ''}">${new Date(msg.timestamp?.toDate ? msg.timestamp.toDate() : Date.now()).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'})}</div>
+              </div>
+              ${isSelf ? `<div class="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 mt-0.5 ring-1 ring-white/20">${currentUser?.avatar ? `<img src="${currentUser.avatar}" class="w-full h-full object-cover">` : `<div class="w-full h-full bg-amber-900 flex items-center justify-center text-[9px]">${(currentUser?.username||'')[0]}</div>`}</div>` : ''}
+            `;
+            container.appendChild(div);
+          });
+          
+          container.scrollTop = container.scrollHeight;
+          
+          // Unread
+          if (!isChatTabActive() && snap.docChanges().some(c => c.type === 'added')) {
+            unreadChat++;
+            const badge = document.getElementById('chat-unread');
+            if (badge) {
+              badge.textContent = unreadChat;
+              badge.classList.remove('hidden');
+            }
+          }
+        });
+    }
+    
+    function isChatTabActive() {
+      return !document.getElementById('sidebar-chat').classList.contains('hidden');
+    }
+    
+    async function syncMoveToFirestore(moveResult) {
+      if (!db || !currentRoomCode) return;
+      
+      const roomRef = db.collection('rooms').doc(currentRoomCode);
+      
+      const now = Date.now();
+      const elapsed = now - lastMoveTimestamp;
+      lastMoveTimestamp = now;
+      
+      // Cập nhật thời gian
+      let newWhiteTime = playerTime;
+      let newBlackTime = opponentTime;
+      
+      if (isWhite) {
+        newWhiteTime = Math.max(0, playerTime - elapsed + increment);
+        playerTime = newWhiteTime;
+      } else {
+        newBlackTime = Math.max(0, opponentTime - elapsed + increment);
+        opponentTime = newBlackTime;
+      }
+      
+      const moves = gameHistory.map(m => m.san);
+      
+      try {
+        await roomRef.update({
+          moves: moves,
+          turn: chess.turn(),
+          whiteTime: newWhiteTime,
+          blackTime: newBlackTime,
+          lastMoveTimestamp: now,
+          currentFen: chess.fen()
+        });
+      } catch (e) {
+        console.warn('Sync move failed', e);
+      }
+    }
+    
+    async function sendChatMessage() {
+      const input = document.getElementById('chat-input');
+      if (!input || !db || !currentRoomCode || !currentUser) return;
+      
+      const text = input.value.trim();
+      if (!text) return;
+      
+      try {
+        await db.collection('rooms').doc(currentRoomCode).collection('chat').add({
+          text,
+          uid: currentUser.uid,
+          name: currentUser.username,
+          avatar: currentUser.avatar,
+          timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        input.value = '';
+      } catch (e) {
+        showToast('Không gửi được tin nhắn', 'error');
+      }
+    }
+    
+    function quickEmoji(emoji) {
+      const input = document.getElementById('chat-input');
+      if (input) {
+        input.value = (input.value + ' ' + emoji).trim();
+        sendChatMessage();
+      }
+    }
+    
+    // ========================================================================
+    // ====================== GAME END & SAVE ================================
+    // ========================================================================
+    
+    function checkGameEnd() {
+      if (!chess) return false;
+      
+      if (chess.in_checkmate()) {
+        const winnerIsWhite = chess.turn() === 'b'; // Bên vừa đánh chiếu hết
+        const result = winnerIsWhite ? '1-0' : '0-1';
+        const iWon = (isWhite && winnerIsWhite) || (!isWhite && !winnerIsWhite);
+        
+        finishGame(result, iWon, 'Chiếu hết');
+        return true;
+      }
+      
+      if (chess.in_stalemate() || chess.in_draw() || chess.in_threefold_repetition() || chess.insufficient_material()) {
+        finishGame('1/2-1/2', null, 'Hòa');
+        return true;
+      }
+      
+      return false;
+    }
+    
+    function finishGame(result, playerWon, reason = '') {
+      gameActive = false;
+      clearInterval(timerInterval);
+      
+      // Dừng đồng hồ
+      if (roomUnsubscribe) { /* keep listener để nhận result cuối */ }
+      
+      const duration = Math.floor((Date.now() - (currentGameMeta.startTime || Date.now())) / 1000);
+      
+      // Tính ELO
+      let delta = 0;
+      let before = currentUser ? currentUser.elo : guestElo;
+      let after = before;
+      
+      if (currentMode === 'ai' || currentMode === 'online') {
+        const oppRating = currentGameMeta.opponent?.rating || (currentMode === 'ai' ? [900,1200,1500,1800][currentDifficulty-1] : 1300);
+        
+        let score = 0.5;
+        if (playerWon === true) score = 1;
+        if (playerWon === false) score = 0;
+        
+        const calc = calculateElo(before, oppRating, score);
+        
+        after = calc.newA;
+        delta = calc.deltaA;
+        
+        // Cập nhật local state
+        if (currentUser) {
+          currentUser.elo = after;
+        } else {
+          guestElo = after;
+        }
+      }
+      
+      // Lưu lịch sử (Firestore hoặc local)
+      const historyEntry = {
+        id: 'local-' + Date.now(),
+        date: new Date(),
+        mode: currentMode,
+        opponent: currentGameMeta.opponent || { name: 'Đối thủ' },
+        result: playerWon === true ? 'win' : (playerWon === false ? 'loss' : 'draw'),
+        ratingDelta: delta,
+        myRatingBefore: before,
+        myRatingAfter: after,
+        duration,
+        moveCount: gameHistory.length,
+        moves: gameHistory.map(m => m.san),
+        resultText: result,
+        reason
+      };
+      
+      if (currentUser && db) {
+        saveGameToFirestore(historyEntry, result);
+      } else {
+        saveGameToLocal(historyEntry);
+      }
+      
+      // Cập nhật ELO lên Firestore nếu online
+      if (currentUser && db && (currentMode === 'ai' || currentMode === 'online')) {
+        updateUserElo(after, delta);
+      }
+      
+      // Hiển thị màn hình kết quả
+      showGameResult(result, playerWon, reason, delta, before, after);
+      
+      // Nếu là online, cập nhật phòng
+      if (currentMode === 'online' && currentRoomCode && db) {
+        const roomRef = db.collection('rooms').doc(currentRoomCode);
+        roomRef.update({
+          status: 'finished',
+          result: result,
+          whiteTime: playerTime,
+          blackTime: opponentTime
+        }).catch(() => {});
+      }
+    }
+    
+    async function saveGameToFirestore(entry, result) {
+      if (!db || !currentUser) return;
+      
+      try {
+        const gameRef = await db.collection('games').add({
+          ...entry,
+          white: isWhite ? currentUser : (entry.opponent || {}),
+          black: isWhite ? (entry.opponent || {}) : currentUser,
+          participants: [currentUser.uid],
+          date: firebase.firestore.FieldValue.serverTimestamp(),
+          resultText: result
+        });
+        
+        // Lưu thêm gameId vào entry để feedback sau này
+        entry.firestoreId = gameRef.id;
+        window._lastFinishedGame = entry;
+      } catch (e) {
+        console.error('Lỗi lưu game Firestore:', e);
+        saveGameToLocal(entry);
+      }
+    }
+    
+    function saveGameToLocal(entry) {
+      try {
+        const history = JSON.parse(localStorage.getItem('chess_history') || '[]');
+        history.unshift(entry);
+        localStorage.setItem('chess_history', JSON.stringify(history.slice(0, 50)));
+      } catch (e) {}
+    }
+    
+    async function updateUserElo(newElo, delta) {
+      if (!db || !currentUser) return;
+      
+      try {
+        await db.collection('users').doc(currentUser.uid).update({
+          elo: newElo,
+          gamesPlayed: firebase.firestore.FieldValue.increment(1)
+        });
+        
+        // Cập nhật UI ngay
+        currentUser.elo = newElo;
+        const navArea = document.getElementById('nav-profile-area');
+        if (navArea) renderNavProfile();
+      } catch (e) {
+        console.warn('Không cập nhật được ELO lên Firestore', e);
+      }
+    }
+    
+    function showGameResult(result, playerWon, reason, delta = 0, before = null, after = null) {
+      const modal = document.getElementById('result-modal');
+      const iconWrap = document.getElementById('result-icon');
+      const title = document.getElementById('result-title');
+      const sub = document.getElementById('result-subtitle');
+      
+      let icon = '';
+      let titleText = '';
+      let colorClass = '';
+      
+      if (result === '1/2-1/2') {
+        icon = `<i class="fa-solid fa-handshake text-5xl text-amber-300"></i>`;
+        titleText = 'HÒA';
+        colorClass = 'text-amber-300';
+      } else if (playerWon) {
+        icon = `<i class="fa-solid fa-trophy text-6xl text-emerald-400"></i>`;
+        titleText = 'CHIẾN THẮNG';
+        colorClass = 'text-emerald-400';
+        playSound('win');
+      } else {
+        icon = `<i class="fa-solid fa-skull text-5xl text-red-400"></i>`;
+        titleText = 'THUA CUỘC';
+        colorClass = 'text-red-400';
+        playSound('lose');
+      }
+      
+      iconWrap.innerHTML = icon;
+      title.innerHTML = `<span class="${colorClass}">${titleText}</span>`;
+      sub.innerHTML = reason ? `${reason}` : '';
+      
+      // ELO
+      const beforeEl = document.getElementById('elo-before');
+      const afterEl = document.getElementById('elo-after');
+      const deltaEl = document.getElementById('elo-delta');
+      
+      const b = before ?? (currentUser ? currentUser.elo : guestElo);
+      const a = after ?? b;
+      const d = delta || (a - b);
+      
+      beforeEl.textContent = b;
+      afterEl.textContent = a;
+      
+      if (d > 0) {
+        deltaEl.innerHTML = `+${d}`;
+        deltaEl.className = 'rating-change rating-up text-lg px-4 py-1';
+      } else if (d < 0) {
+        deltaEl.innerHTML = `${d}`;
+        deltaEl.className = 'rating-change rating-down text-lg px-4 py-1';
+      } else {
+        deltaEl.innerHTML = `0`;
+        deltaEl.className = 'rating-change text-lg px-4 py-1 bg-slate-800 text-slate-300';
+      }
+      
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      
+      // Lưu để feedback
+      window._lastFinishedGame = window._lastFinishedGame || { result: playerWon ? 'win' : 'loss', ratingDelta: d };
+    }
+    
+    function hideResultModal() {
+      const modal = document.getElementById('result-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+    
+    function hideResultModalAndExit() {
+      hideResultModal();
+      // Hiện feedback trước khi về menu
+      setTimeout(() => {
+        showFeedbackModal();
+      }, 180);
+      exitGame();
+    }
+    
+    function playAgain() {
+      hideResultModal();
+      const lastMode = currentMode;
+      const lastDiff = currentDifficulty;
+      
+      exitGame(true);
+      
+      setTimeout(() => {
+        if (lastMode === 'ai') {
+          startAIGame(lastDiff);
+        } else if (lastMode === 'local') {
+          startLocal2PGame();
+        } else {
+          switchView('menu');
+        }
+      }, 140);
+    }
+    
+    function goToHistoryFromResult() {
+      hideResultModal();
+      exitGame(true);
+      setTimeout(showMatchHistory, 120);
+    }
+    
+    // ========================================================================
+    // ====================== POST-GAME FEEDBACK ==============================
+    // ========================================================================
+    
+    function showFeedbackModal() {
+      const modal = document.getElementById('feedback-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      document.getElementById('feedback-comment').value = '';
+    }
+    
+    function hideFeedbackModal() {
+      const modal = document.getElementById('feedback-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+    
+    async function submitFeedback(rating) {
+      await actuallySubmitFeedback(rating, '');
+    }
+    
+    async function submitFeedbackWithComment() {
+      const comment = document.getElementById('feedback-comment').value.trim();
+      await actuallySubmitFeedback(0, comment); // 0 = dùng nút like/dislike trước đó, nhưng ở đây cho phép gửi trực tiếp
+    }
+    
+    async function actuallySubmitFeedback(rating, comment) {
+      hideFeedbackModal();
+      
+      const game = window._lastFinishedGame;
+      if (!game) return;
+      
+      try {
+        if (db) {
+          await db.collection('feedbacks').add({
+            gameId: game.firestoreId || null,
+            fromUid: currentUser ? currentUser.uid : 'guest',
+            rating: rating || 1,
+            comment: comment || '',
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+          });
+        }
+        showToast('Cảm ơn phản hồi của bạn!', 'success');
+      } catch (e) {
+        showToast('Đã ghi nhận phản hồi (offline)', 'success');
+      }
+    }
+    
+    // ========================================================================
+    // ====================== REPLAY SYSTEM ===================================
+    // ========================================================================
+    /*
+      === LOGIC XEM LẠI VÁN CỜ ===
+      - Lưu mảng moves (SAN) đầy đủ khi kết thúc ván.
+      - Khi mở replay: tạo instance chess mới, áp dụng lần lượt các nước.
+      - Slider + nút điều khiển thay đổi chỉ số ply (nước đi).
+      - Render board ở trạng thái ply đó (không cho phép di chuyển).
+      - Hiển thị kết quả + thay đổi ELO đã lưu.
+    */
+    
+    function showReplay(gameData) {
+      switchView('replay');
+      
+      currentReplayGame = gameData;
+      replayMoves = gameData.moves || [];
+      replayIndex = replayMoves.length; // Mặc định xem đến cuối ván
+      
+      replayChess = new Chess();
+      
+      // Áp dụng toàn bộ nước để có vị trí cuối
+      replayMoves.forEach(san => {
+        try { replayChess.move(san); } catch (e) {}
+      });
+      
+      const container = document.getElementById('replay-board');
+      container.innerHTML = '';
+      container.style.gridTemplateColumns = 'repeat(8, 1fr)';
+      
+      renderReplayBoard();
+      
+      // Slider
+      const slider = document.getElementById('replay-slider');
+      slider.max = replayMoves.length;
+      slider.value = replayIndex;
+      
+      document.getElementById('replay-meta').innerHTML = `
+        ${gameData.opponent?.name || 'Đối thủ'} • ${gameData.date ? new Date(gameData.date).toLocaleDateString('vi-VN') : ''} • ${gameData.moveCount || replayMoves.length} nước
+      `;
+      
+      const resultEl = document.getElementById('replay-result');
+      if (gameData.result === 'win') resultEl.innerHTML = `<span class="text-emerald-400">Thắng</span>`;
+      else if (gameData.result === 'loss') resultEl.innerHTML = `<span class="text-red-400">Thua</span>`;
+      else resultEl.innerHTML = `<span class="text-amber-300">Hòa</span>`;
+      
+      document.getElementById('replay-rating-info').innerHTML = `
+        <div class="text-xs text-slate-400">THAY ĐỔI ELO</div>
+        <div class="flex justify-center items-center gap-x-3 mt-1">
+          <span class="text-xl font-semibold">${gameData.myRatingBefore || '—'}</span>
+          <span class="text-2xl font-bold ${gameData.ratingDelta >= 0 ? 'text-emerald-400' : 'text-red-400'}">
+            ${gameData.ratingDelta >= 0 ? '+' : ''}${gameData.ratingDelta || 0}
+          </span>
+          <span class="text-xl font-semibold">${gameData.myRatingAfter || '—'}</span>
+        </div>
+      `;
+      
+      updateReplayMoveList();
+      updateReplayControls();
+    }
+    
+    function renderReplayBoard() {
+      const container = document.getElementById('replay-board');
+      if (!container || !replayChess) return;
+      
+      container.innerHTML = '';
+      const boardTheme = BOARD_THEMES[currentBoardTheme];
+      const squares = replayChess.board();
+      
+      for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+          const piece = squares[row][col];
+          const squareName = String.fromCharCode(97 + col) + (8 - row);
+          
+          const sq = document.createElement('div');
+          sq.className = `square aspect-square flex items-center justify-center relative ${(row + col) % 2 === 0 ? 'light' : 'dark'} ${boardTheme.class || ''}`;
+          sq.dataset.square = squareName;
+          
+          if (piece) {
+            const p = document.createElement('div');
+            p.className = 'chess-piece';
+            p.innerHTML = getPieceSVG(piece.color, piece.type);
+            sq.appendChild(p);
+          }
+          container.appendChild(sq);
+        }
+      }
+    }
+    
+    function updateReplayMoveList() {
+      const el = document.getElementById('replay-move-list');
+      if (!el) return;
+      el.innerHTML = '';
+      
+      const moves = replayMoves;
+      for (let i = 0; i < moves.length; i += 2) {
+        const row = document.createElement('div');
+        row.className = `flex items-center gap-2 px-2 py-px rounded hover:bg-white/5 cursor-pointer ${replayIndex === i + 1 || replayIndex === i + 2 ? 'bg-white/5' : ''}`;
+        
+        const whiteMove = moves[i] || '';
+        const blackMove = moves[i + 1] || '';
+        
+        row.innerHTML = `
+          <div class="w-6 text-right text-amber-400 font-mono text-xs">${Math.floor(i / 2) + 1}.</div>
+          <div onclick="jumpToReplayMove(${i + 1}); event.stopImmediatePropagation()" class="flex-1 font-medium hover:text-amber-300 ${replayIndex === i + 1 ? 'text-amber-300' : ''}">${whiteMove}</div>
+          <div onclick="jumpToReplayMove(${i + 2}); event.stopImmediatePropagation()" class="flex-1 font-medium hover:text-amber-300 ${replayIndex === i + 2 ? 'text-amber-300' : ''}">${blackMove}</div>
+        `;
+        
+        row.onclick = () => jumpToReplayMove(i + 1);
+        el.appendChild(row);
+      }
+      el.scrollTop = el.scrollHeight;
+    }
+    
+    function jumpToReplayMove(index) {
+      if (!replayChess || !replayMoves) return;
+      
+      replayIndex = Math.max(0, Math.min(index, replayMoves.length));
+      
+      // Replay từ đầu
+      replayChess = new Chess();
+      for (let i = 0; i < replayIndex; i++) {
+        try { replayChess.move(replayMoves[i]); } catch (e) {}
+      }
+      
+      renderReplayBoard();
+      
+      const slider = document.getElementById('replay-slider');
+      if (slider) slider.value = replayIndex;
+      
+      document.getElementById('replay-move-counter').textContent = `Nước ${replayIndex} / ${replayMoves.length}`;
+      
+      updateReplayMoveList();
+    }
+    
+    function replayNext() {
+      if (replayIndex < replayMoves.length) {
+        jumpToReplayMove(replayIndex + 1);
+      }
+    }
+    
+    function replayPrev() {
+      if (replayIndex > 0) {
+        jumpToReplayMove(replayIndex - 1);
+      }
+    }
+    
+    function replayFirst() {
+      jumpToReplayMove(0);
+    }
+    
+    function replayLast() {
+      jumpToReplayMove(replayMoves.length);
+    }
+    
+    function updateReplayControls() {
+      const slider = document.getElementById('replay-slider');
+      if (slider) {
+        slider.oninput = () => jumpToReplayMove(parseInt(slider.value));
+      }
+      document.getElementById('replay-move-counter').textContent = `Nước ${replayIndex} / ${replayMoves.length}`;
+    }
+    
+    function exitReplay() {
+      switchView('history');
+      currentReplayGame = null;
+      replayChess = null;
+      replayMoves = [];
+    }
+    
+    // ========================================================================
+    // ====================== HISTORY & LEADERBOARD ===========================
+    // ========================================================================
+    
+    async function showMatchHistory() {
+      switchView('history');
+      const container = document.getElementById('history-list');
+      container.innerHTML = `<div class="col-span-2 py-8 text-center text-slate-400">Đang tải lịch sử...</div>`;
+      
+      let games = [];
+      
+      if (currentUser && db) {
+        try {
+          const snap = await db.collection('games')
+            .where('participants', 'array-contains', currentUser.uid)
+            .orderBy('date', 'desc')
+            .limit(30)
+            .get();
+          
+          snap.forEach(doc => games.push({ id: doc.id, ...doc.data() }));
+        } catch (e) {
+          console.warn('Lỗi tải lịch sử từ Firestore, dùng dữ liệu cục bộ', e);
+        }
+      }
+      
+      // Fallback local
+      if (games.length === 0) {
+        try {
+          games = JSON.parse(localStorage.getItem('chess_history') || '[]');
+        } catch (e) {}
+      }
+      
+      container.innerHTML = '';
+      
+      if (games.length === 0) {
+        container.innerHTML = `<div class="col-span-2 py-12 text-center">
+          <i class="fa-solid fa-history text-5xl text-slate-700 mb-3"></i>
+          <div>Chưa có trận đấu nào được lưu.</div>
+        </div>`;
+        return;
+      }
+      
+      games.forEach(game => {
+        const dateStr = game.date?.toDate ? game.date.toDate().toLocaleDateString('vi-VN') : (game.date ? new Date(game.date).toLocaleDateString('vi-VN') : '');
+        
+        const card = document.createElement('div');
+        card.className = `luxury-card border border-slate-700 rounded-3xl p-5 flex flex-col`;
+        
+        const resultColor = game.result === 'win' ? 'emerald' : (game.result === 'loss' ? 'red' : 'amber');
+        
+        card.innerHTML = `
+          <div class="flex justify-between items-start">
+            <div>
+              <div class="text-sm text-slate-400">${dateStr} • ${Math.floor((game.duration || 0) / 60)} phút</div>
+              <div class="font-semibold text-lg mt-0.5">${game.opponent?.name || 'Đối thủ'}</div>
+            </div>
+            <div class="text-right">
+              <div class="inline-block px-3 py-0.5 text-xs font-medium rounded-full bg-${resultColor}-900/40 text-${resultColor}-300">${game.result === 'win' ? 'THẮNG' : game.result === 'loss' ? 'THUA' : 'HÒA'}</div>
+              <div class="text-xs mt-1 text-slate-400">${game.moveCount || 0} nước</div>
+            </div>
+          </div>
+          
+          <div class="mt-auto pt-4 flex items-center justify-between">
+            <div>
+              ${game.ratingDelta != null ? `
+                <div class="text-xs text-slate-400">ELO</div>
+                <div class="flex items-center gap-x-1.5">
+                  <span class="font-semibold">${game.myRatingBefore}</span>
+                  <span class="font-bold ${game.ratingDelta >= 0 ? 'text-emerald-400' : 'text-red-400'}">
+                    ${game.ratingDelta >= 0 ? '+' : ''}${game.ratingDelta}
+                  </span>
+                </div>` : `<div class="text-xs text-slate-500">Không xếp hạng</div>`}
+            </div>
+            
+            <button onclick='showReplay(${JSON.stringify(game).replace(/'/g, "\\'")})' 
+                    class="px-5 py-1.5 rounded-2xl text-sm bg-white/5 hover:bg-white/10 border border-white/10 flex items-center gap-x-2">
+              <i class="fa-solid fa-play"></i>
+              <span>Xem lại</span>
+            </button>
+          </div>
+        `;
+        
+        container.appendChild(card);
+      });
+    }
+    
+    async function loadLeaderboard(forceRefresh = false) {
+      const container = document.getElementById('leaderboard-list');
+      container.innerHTML = `<div class="px-6 py-8 text-center text-slate-400">Đang tải bảng xếp hạng...</div>`;
+      
+      let players = [];
+      
+      if (db) {
+        try {
+          const snap = await db.collection('users')
+            .orderBy('elo', 'desc')
+            .limit(30)
+            .get();
+          
+          snap.forEach(doc => {
+            players.push({ id: doc.id, ...doc.data() });
+          });
+        } catch (e) {
+          console.error('Lỗi tải leaderboard:', e);
+        }
+      }
+      
+      // Fallback demo data nếu chưa có Firestore
+      if (players.length === 0) {
+        players = [
+          { username: 'Nguyễn Minh Quân', elo: 2140, avatar: null },
+          { username: 'Trần Thị Lan', elo: 1985, avatar: null },
+          { username: 'Lê Hoàng Long', elo: 1870, avatar: null },
+          { username: 'Phạm Tuấn Kiệt', elo: 1795, avatar: null },
+          { username: 'Võ Ngọc Hà', elo: 1720, avatar: null }
+        ];
+      }
+      
+      container.innerHTML = '';
+      
+      players.forEach((p, idx) => {
+        const rank = idx + 1;
+        const isMe = currentUser && (p.id === currentUser.uid || p.username === currentUser.username);
+        
+        const row = document.createElement('div');
+        row.className = `px-6 py-3.5 flex items-center gap-x-4 top-player ${isMe ? 'gold ring-1 ring-amber-400/60' : ''} ${rank <= 3 ? 'font-medium' : ''}`;
+        
+        let rankBadge = '';
+        if (rank === 1) rankBadge = `<i class="fa-solid fa-trophy text-amber-400"></i>`;
+        else if (rank === 2) rankBadge = `<i class="fa-solid fa-medal text-slate-300"></i>`;
+        else if (rank === 3) rankBadge = `<i class="fa-solid fa-medal text-amber-700"></i>`;
+        else rankBadge = `<span class="font-mono text-xs w-4 text-center text-slate-500">${rank}</span>`;
+        
+        const avatarHTML = p.avatar 
+          ? `<img src="${p.avatar}" class="w-9 h-9 rounded-2xl object-cover ring-1 ring-white/10">` 
+          : `<div class="w-9 h-9 rounded-2xl bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center ring-1 ring-white/10 text-sm font-semibold">${(p.username || 'U')[0]}</div>`;
+        
+        row.innerHTML = `
+          <div class="w-7 text-center">${rankBadge}</div>
+          <div>${avatarHTML}</div>
+          <div class="flex-1 min-w-0">
+            <div class="font-medium truncate">${p.username || 'Người chơi'}</div>
+          </div>
+          <div class="text-right">
+            <div class="font-mono text-xl font-semibold text-amber-300 tabular-nums">${p.elo || 1200}</div>
+          </div>
+        `;
+        
+        if (isMe) {
+          row.innerHTML += `<div class="text-[10px] px-2 py-px bg-amber-300 text-black rounded">BẠN</div>`;
+        }
+        
+        container.appendChild(row);
+      });
+    }
+    
+    function showLeaderboard() {
+      switchView('leaderboard');
+      loadLeaderboard();
+    }
+    
+    // ========================================================================
+    // ====================== AUTHENTICATION ==================================
+    // ========================================================================
+    
+    function handleAuthStateChange(user) {
+      if (user) {
+        // Đã đăng nhập
+        loadOrCreateUserProfile(user);
+      } else {
+        currentUser = null;
+        renderNavProfile();
+        renderMenuUserStats();
+      }
+    }
+    
+    async function loadOrCreateUserProfile(firebaseUser) {
+      if (!db) {
+        // Không có db, dùng thông tin cơ bản
+        currentUser = {
+          uid: firebaseUser.uid,
+          username: firebaseUser.displayName || 'Người chơi',
+          avatar: firebaseUser.photoURL,
+          elo: 1200
+        };
+        renderNavProfile();
+        renderMenuUserStats();
+        return;
+      }
+      
+      const userRef = db.collection('users').doc(firebaseUser.uid);
+      const snap = await userRef.get();
+      
+      if (snap.exists) {
+        currentUser = { uid: firebaseUser.uid, ...snap.data() };
+      } else {
+        // Tạo profile mới
+        currentUser = {
+          uid: firebaseUser.uid,
+          username: firebaseUser.displayName || 'Người chơi ' + Math.floor(Math.random() * 9000),
+          avatar: firebaseUser.photoURL || null,
+          elo: 1200,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        await userRef.set(currentUser);
+      }
+      
+      renderNavProfile();
+      renderMenuUserStats();
+    }
+    
+    async function loginWithGoogle() {
+      if (!auth) {
+        showToast('Firebase chưa được cấu hình', 'error');
+        return;
+      }
+      try {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        await auth.signInWithPopup(provider);
+        hideAuthModal();
+      } catch (e) {
+        showToast('Đăng nhập Google thất bại: ' + e.message, 'error');
+      }
+    }
+    
+    async function loginWithFacebook() {
+      if (!auth) {
+        showToast('Firebase chưa được cấu hình', 'error');
+        return;
+      }
+      try {
+        const provider = new firebase.auth.FacebookAuthProvider();
+        await auth.signInWithPopup(provider);
+        hideAuthModal();
+      } catch (e) {
+        showToast('Đăng nhập Facebook thất bại (cần cấu hình Facebook App)', 'error');
+      }
+    }
+    
+    function logout() {
+      if (auth) auth.signOut();
+      currentUser = null;
+      renderNavProfile();
+      renderMenuUserStats();
+      switchView('menu');
+    }
+    
+    function showAuthModal() {
+      document.getElementById('auth-modal').classList.remove('hidden');
+      document.getElementById('auth-modal').classList.add('flex');
+    }
+    
+    function hideAuthModal() {
+      document.getElementById('auth-modal').classList.add('hidden');
+      document.getElementById('auth-modal').classList.remove('flex');
+    }
+    
+    // ========================================================================
+    // ====================== UI HELPERS ======================================
+    // ========================================================================
+    
+    function renderNavProfile() {
+      const area = document.getElementById('nav-profile-area');
+      if (!area) return;
+      
+      if (currentUser) {
+        area.innerHTML = `
+          <div class="flex items-center gap-x-3 cursor-pointer" onclick="showUserMenu(event)">
+            <div class="text-right hidden sm:block">
+              <div class="text-sm font-medium leading-none">${currentUser.username}</div>
+              <div class="text-[10px] text-amber-400 font-mono mt-px">${currentUser.elo} ELO</div>
+            </div>
+            <div class="w-9 h-9 rounded-2xl overflow-hidden ring-2 ring-offset-2 ring-offset-[#0a0c10] ring-amber-900/60 bg-slate-800 flex-shrink-0">
+              ${currentUser.avatar 
+                ? `<img src="${currentUser.avatar}" class="w-full h-full object-cover">` 
+                : `<div class="w-full h-full flex items-center justify-center bg-gradient-to-br from-amber-900/60 to-slate-800 text-sm font-semibold">${currentUser.username[0]}</div>`}
+            </div>
+          </div>
+        `;
+      } else {
+        area.innerHTML = `
+          <button onclick="showAuthModal()" class="px-6 py-2 text-sm rounded-2xl border border-slate-600 hover:border-amber-400 flex items-center gap-x-2">
+            <i class="fa-solid fa-user"></i>
+            <span>Đăng nhập</span>
+          </button>
+        `;
+      }
+    }
+    
+    function showUserMenu(e) {
+      const menu = document.createElement('div');
+      menu.className = 'absolute right-6 top-20 z-[130] luxury-card border border-slate-700 rounded-2xl py-1 w-52 shadow-2xl';
+      menu.innerHTML = `
+        <div class="px-4 py-2.5 border-b border-slate-700">
+          <div class="font-medium">${currentUser.username}</div>
+          <div class="text-xs text-amber-400">${currentUser.elo} ELO</div>
+        </div>
+        <div onclick="showMatchHistory(); document.body.removeChild(this.parentNode)" class="px-4 py-2.5 text-sm cursor-pointer hover:bg-white/5">Lịch sử trận đấu</div>
+        <div onclick="showLeaderboard(); document.body.removeChild(this.parentNode)" class="px-4 py-2.5 text-sm cursor-pointer hover:bg-white/5">Bảng xếp hạng</div>
+        <div onclick="showSettings(); document.body.removeChild(this.parentNode)" class="px-4 py-2.5 text-sm cursor-pointer hover:bg-white/5">Cài đặt</div>
+        <div class="h-px bg-slate-700 my-1"></div>
+        <div onclick="logout(); document.body.removeChild(this.parentNode)" class="px-4 py-2.5 text-sm cursor-pointer text-red-300 hover:bg-red-900/20">Đăng xuất</div>
+      `;
+      document.body.appendChild(menu);
+      
+      const close = (ev) => {
+        if (!menu.contains(ev.target)) {
+          document.body.removeChild(menu);
+          document.removeEventListener('click', close);
+        }
+      };
+      setTimeout(() => document.addEventListener('click', close, { once: true }), 0);
+    }
+    
+    function renderMenuUserStats() {
+      const el = document.getElementById('menu-user-stats');
+      if (!el) return;
+      
+      const elo = currentUser ? currentUser.elo : guestElo;
+      const name = currentUser ? currentUser.username : 'Khách';
+      
+      el.innerHTML = `
+        <div class="inline-flex items-center gap-x-4 px-5 py-2 bg-[#111827] border border-slate-700 rounded-3xl">
+          <div class="flex items-center gap-x-2.5">
+            <div class="text-xs text-slate-400">ELO HIỆN TẠI</div>
+            <div class="font-mono text-3xl font-semibold text-amber-300 tabular-nums">${elo}</div>
+          </div>
+          <div class="h-3 w-px bg-slate-700"></div>
+          <div class="text-sm">${name}</div>
+        </div>
+      `;
+    }
+    
+    function setupPlayerCards(isPlayerWhite, playerData, opponentData) {
+      // Player (bạn)
+      const pName = document.getElementById('player-name');
+      const pElo = document.getElementById('player-elo');
+      const pAv = document.getElementById('player-avatar');
+      
+      pName.textContent = playerData.name || 'Bạn';
+      pElo.textContent = playerData.elo != null ? playerData.elo : '—';
+      
+      if (playerData.avatar) {
+        pAv.innerHTML = `<img src="${playerData.avatar}" class="w-full h-full object-cover">`;
+      } else {
+        pAv.innerHTML = `<div class="w-full h-full bg-gradient-to-br from-amber-900 to-slate-800 flex items-center justify-center text-base font-semibold">${(playerData.name || 'B')[0]}</div>`;
+      }
+      
+      // Opponent
+      const oName = document.getElementById('opponent-name');
+      const oElo = document.getElementById('opponent-elo');
+      const oAv = document.getElementById('opponent-avatar');
+      
+      oName.textContent = opponentData.name || 'Đối thủ';
+      oElo.textContent = opponentData.elo != null ? opponentData.elo : '—';
+      
+      if (opponentData.avatar) {
+        oAv.innerHTML = `<img src="${opponentData.avatar}" class="w-full h-full object-cover">`;
+      } else {
+        oAv.innerHTML = `<div class="w-full h-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-base font-semibold">${(opponentData.name || 'O')[0]}</div>`;
+      }
+    }
+    
+    function updateMoveList() {
+      const container = document.getElementById('move-list');
+      if (!container || !chess) return;
+      
+      container.innerHTML = '';
+      
+      const history = chess.history();
+      
+      for (let i = 0; i < history.length; i += 2) {
+        const row = document.createElement('div');
+        row.className = `flex text-sm px-1 py-[1px] font-medium tabular-nums`;
+        
+        const white = history[i] || '';
+        const black = history[i + 1] || '';
+        
+        row.innerHTML = `
+          <div class="w-6 text-right pr-2 text-amber-400/70">${Math.floor(i / 2) + 1}.</div>
+          <div class="flex-1">${white}</div>
+          <div class="flex-1">${black}</div>
+        `;
+        container.appendChild(row);
+      }
+      container.scrollTop = container.scrollHeight;
+    }
+    
+    function updateCapturedPieces() {
+      const oppEl = document.getElementById('captured-by-opponent');
+      const diffEl = document.getElementById('material-diff');
+      
+      if (!oppEl) return;
+      
+      oppEl.innerHTML = '';
+      
+      const myColor = isWhite ? 'w' : 'b';
+      const oppColor = isWhite ? 'b' : 'w';
+      
+      // Quân bị bắt bởi đối thủ = quân của mình bị mất
+      const capturedByOpp = capturedPieces[myColor] || [];
+      
+      capturedByOpp.forEach(type => {
+        const small = document.createElement('div');
+        small.className = 'w-5 h-5 opacity-75';
+        small.innerHTML = getPieceSVG(myColor, type);
+        oppEl.appendChild(small);
+      });
+      
+      // Tính chênh lệch vật chất đơn giản
+      const myCaptured = capturedPieces[oppColor] || [];
+      let valMe = 0, valOpp = 0;
+      capturedByOpp.forEach(t => valOpp += (PIECE_VALUES[t] || 0));
+      myCaptured.forEach(t => valMe += (PIECE_VALUES[t] || 0));
+      
+      const diff = valMe - valOpp;
+      if (diff > 0) {
+        diffEl.textContent = `+${Math.floor(diff / 100)}`;
+        diffEl.className = 'mt-2 text-xs px-1 text-emerald-400 font-medium';
+      } else if (diff < 0) {
+        diffEl.textContent = `${Math.floor(diff / 100)}`;
+        diffEl.className = 'mt-2 text-xs px-1 text-red-400 font-medium';
+      } else {
+        diffEl.textContent = '';
+      }
+    }
+    
+    function switchGameSidebarTab(tab) {
+      const movesPanel = document.getElementById('sidebar-moves');
+      const chatPanel = document.getElementById('sidebar-chat');
+      const tabM = document.getElementById('tab-moves');
+      const tabC = document.getElementById('tab-chat');
+      
+      if (tab === 'moves') {
+        movesPanel.classList.remove('hidden');
+        chatPanel.classList.add('hidden');
+        tabM.classList.add('border-b-2', 'border-amber-400', 'text-amber-300');
+        tabM.classList.remove('text-slate-400');
+        tabC.classList.remove('border-b-2', 'border-amber-400', 'text-amber-300');
+        tabC.classList.add('text-slate-400');
+      } else {
+        movesPanel.classList.add('hidden');
+        chatPanel.classList.remove('hidden');
+        tabC.classList.add('border-b-2', 'border-amber-400', 'text-amber-300');
+        tabC.classList.remove('text-slate-400');
+        tabM.classList.remove('border-b-2', 'border-amber-400', 'text-amber-300');
+        tabM.classList.add('text-slate-400');
+        
+        // Reset unread
+        unreadChat = 0;
+        const badge = document.getElementById('chat-unread');
+        if (badge) badge.classList.add('hidden');
+      }
+    }
+    
+    function updateBoardTheme(themeKey) {
+      currentBoardTheme = themeKey;
+      localStorage.setItem('chess_board_theme', themeKey);
+      
+      // Re-render nếu đang trong game hoặc replay
+      const boardContainer = document.getElementById('chessboard-container');
+      if (boardContainer && !boardContainer.parentElement.classList.contains('hidden')) {
+        if (chess) renderBoard(chess);
+      }
+      
+      const replayBoard = document.getElementById('replay-board');
+      if (replayBoard && replayChess) {
+        renderReplayBoard();
+      }
+    }
+    
+    function setPieceStyle(style) {
+      currentPieceStyle = style;
+      localStorage.setItem('chess_piece_style', style);
+      
+      // Re-render pieces
+      if (chess && document.getElementById('view-game').classList.contains('hidden') === false) {
+        renderBoard(chess);
+      }
+      if (replayChess) {
+        renderReplayBoard();
+      }
+      
+      // Update active buttons
+      document.getElementById('style-classic').classList.toggle('border-amber-400', style === 'classic');
+      document.getElementById('style-modern').classList.toggle('border-amber-400', style === 'modern');
+    }
+    
+    function renderThemeSwatches() {
+      const container = document.getElementById('theme-swatches');
+      if (!container) return;
+      
+      container.innerHTML = '';
+      
+      Object.keys(BOARD_THEMES).forEach(key => {
+        const t = BOARD_THEMES[key];
+        const sw = document.createElement('div');
+        sw.className = `h-8 rounded-xl cursor-pointer ring-1 ring-offset-2 ring-offset-[#0a0c10] ring-white/10 overflow-hidden ${currentBoardTheme === key ? 'ring-amber-400' : ''}`;
+        sw.innerHTML = `
+          <div class="flex h-full">
+            <div class="flex-1" style="background:${t.light}"></div>
+            <div class="flex-1" style="background:${t.dark}"></div>
+          </div>
+        `;
+        sw.title = t.name;
+        sw.onclick = () => {
+          updateBoardTheme(key);
+          // Re-render swatches
+          renderThemeSwatches();
+        };
+        container.appendChild(sw);
+      });
+    }
+    
+    function showSettings() {
+      const modal = document.getElementById('settings-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      
+      // Sound toggle
+      document.getElementById('sound-toggle').checked = soundEnabled;
+      
+      // Username
+      if (currentUser) {
+        document.getElementById('username-input').value = currentUser.username || '';
+      }
+      
+      renderThemeSwatches();
+      
+      // Active style buttons
+      document.getElementById('style-classic').classList.toggle('border-amber-400', currentPieceStyle === 'classic');
+      document.getElementById('style-modern').classList.toggle('border-amber-400', currentPieceStyle === 'modern');
+    }
+    
+    function hideSettingsModal() {
+      const modal = document.getElementById('settings-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+    
+    async function saveUsername() {
+      const input = document.getElementById('username-input').value.trim();
+      if (!input || !currentUser) return;
+      
+      currentUser.username = input;
+      
+      if (db) {
+        try {
+          await db.collection('users').doc(currentUser.uid).update({ username: input });
+        } catch (e) {}
+      }
+      
+      renderNavProfile();
+      renderMenuUserStats();
+      hideSettingsModal();
+      showToast('Đã cập nhật tên', 'success');
+    }
+    
+    function setPieceStyleFromStorage() {
+      const saved = localStorage.getItem('chess_piece_style');
+      if (saved && PIECE_SVGS[saved]) currentPieceStyle = saved;
+    }
+    
+    function loadPreferences() {
+      const savedTheme = localStorage.getItem('chess_board_theme');
+      if (savedTheme && BOARD_THEMES[savedTheme]) currentBoardTheme = savedTheme;
+      
+      const savedSound = localStorage.getItem('chess_sound');
+      if (savedSound !== null) soundEnabled = savedSound === 'true';
+      
+      setPieceStyleFromStorage();
+      
+      // Guest ELO
+      const savedGuest = localStorage.getItem('chess_guest_elo');
+      if (savedGuest) guestElo = parseInt(savedGuest, 10) || 1200;
+    }
+    
+    function saveLocalDraft() {
+      // Lưu ELO khách
+      localStorage.setItem('chess_guest_elo', guestElo);
+    }
+    
+    function generateRoomCode() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let code = '';
+      for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+      return code;
+    }
+    
+    function copyRoomCode() {
+      const codeEl = document.getElementById('room-code-display');
+      if (!codeEl) return;
+      navigator.clipboard.writeText(codeEl.textContent).then(() => {
+        showToast('Đã sao chép mã phòng', 'success');
+      });
+    }
+    
+    function showCreateRoomModal() {
+      if (!currentUser) {
+        showAuthModal();
+        return;
+      }
+      const modal = document.getElementById('create-room-modal');
+      const code = generateRoomCode();
+      document.getElementById('room-code-display').textContent = code;
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+    
+    function hideCreateRoomModal() {
+      const modal = document.getElementById('create-room-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+    
+    function showJoinRoomModal() {
+      if (!currentUser) {
+        showAuthModal();
+        return;
+      }
+      const modal = document.getElementById('join-room-modal');
+      document.getElementById('join-code-input').value = '';
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      setTimeout(() => document.getElementById('join-code-input').focus(), 60);
+    }
+    
+    function hideJoinRoomModal() {
+      const modal = document.getElementById('join-room-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+    
+    function switchView(view) {
+      // Hide all
+      ['menu', 'game', 'leaderboard', 'history', 'replay'].forEach(v => {
+        const el = document.getElementById('view-' + v);
+        if (el) el.classList.add('hidden');
+      });
+      
+      const target = document.getElementById('view-' + view);
+      if (target) target.classList.remove('hidden');
+      
+      // Dọn dẹp khi rời game
+      if (view !== 'game' && gameActive) {
+        // Không tự động kết thúc, chỉ cho phép rời qua nút
+      }
+    }
+    
+    function confirmGuestMode() {
+      return confirm('Bạn đang ở chế độ khách. ELO và lịch sử sẽ chỉ được lưu cục bộ trên trình duyệt này.\n\nTiếp tục?');
+    }
+    
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, s => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[s]));
+    }
+    
+    function showToast(msg, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = `px-5 py-3 rounded-2xl shadow-xl text-sm flex items-center gap-x-2 border ${type === 'error' ? 'bg-red-900/80 border-red-700 text-red-200' : 'bg-slate-800 border-slate-600'}`;
+      toast.innerHTML = `<div>${msg}</div>`;
+      container.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.style.transition = 'all .2s';
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 150);
+      }, 2600);
+    }
+    
+    // ========================================================================
+    // ====================== CLEANUP & EXIT GAME ============================
+    // ========================================================================
+    
+    function exitGame(silent = false) {
+      gameActive = false;
+      clearInterval(timerInterval);
+      
+      if (roomUnsubscribe) {
+        roomUnsubscribe();
+        roomUnsubscribe = null;
+      }
+      if (chatUnsubscribe) {
+        chatUnsubscribe();
+        chatUnsubscribe = null;
+      }
+      
+      // Xóa phòng chờ nếu chủ phòng rời (online)
+      if (currentMode === 'online' && currentRoomCode && db && currentUser) {
+        const ref = db.collection('rooms').doc(currentRoomCode);
+        ref.get().then(s => {
+          if (s.exists) {
+            const d = s.data();
+            if (d.status === 'waiting' && d.white && d.white.uid === currentUser.uid) {
+              ref.delete().catch(() => {});
+            } else if (d.status === 'playing') {
+              // Có thể báo đối thủ đã rời
+              ref.update({ status: 'finished', result: isWhite ? '0-1' : '1-0' }).catch(() => {});
+            }
+          }
+        });
+      }
+      
+      currentRoomCode = null;
+      currentMode = null;
+      chess = null;
+      
+      // Quay về menu
+      switchView('menu');
+      renderMenuUserStats();
+      
+      if (!silent) {
+        showToast('Đã rời trận đấu', 'success');
+      }
+    }
+    
+    function offerDraw() {
+      if (!gameActive) return;
+      
+      if (currentMode === 'online' && currentRoomCode) {
+        if (confirm('Gửi đề nghị cầu hòa đến đối thủ?')) {
+          // Trong thực tế nên gửi qua chat hoặc message đặc biệt
+          showToast('Đã gửi đề nghị cầu hòa (demo)', 'success');
+        }
+      } else {
+        if (confirm('Đối thủ có đồng ý cầu hòa không?')) {
+          finishGame('1/2-1/2', null, 'Cầu hòa');
+        }
+      }
+    }
+    
+    function resignGame() {
+      if (!gameActive) return;
+      if (!confirm('Bạn chắc chắn muốn đầu hàng?')) return;
+      
+      gameActive = false;
+      clearInterval(timerInterval);
+      
+      const result = isWhite ? '0-1' : '1-0';
+      const playerWon = false;
+      
+      finishGame(result, playerWon, 'Đầu hàng');
+    }
+    
+    // ========================================================================
+    // ====================== INITIALIZATION ==================================
+    // ========================================================================
+    
+    function initializeBoardCoords() {
+      // Files a-h
+      const files = document.getElementById('board-files');
+      if (files) {
+        files.innerHTML = '';
+        for (let i = 0; i < 8; i++) {
+          const span = document.createElement('div');
+          span.className = 'text-center';
+          span.style.width = '12.5%';
+          span.textContent = String.fromCharCode(97 + i);
+          files.appendChild(span);
+        }
+      }
+      
+      // Ranks 8-1
+      const ranks = document.getElementById('board-coords');
+      if (ranks) {
+        ranks.innerHTML = '';
+        for (let i = 8; i >= 1; i--) {
+          const span = document.createElement('div');
+          span.className = 'text-right pr-1';
+          span.textContent = i;
+          ranks.appendChild(span);
+        }
+      }
+    }
+    
+    function initThemeAndPrefs() {
+      loadPreferences();
+      
+      // Tailwind script config
+      if (typeof tailwind !== 'undefined') {
+        tailwind.config = {
+          theme: {
+            extend: {
+              fontFamily: {
+                'luxury': ['Playfair Display', 'Georgia', 'serif']
+              }
+            }
+          }
+        };
+      }
+    }
+    
+    function initAudioOnFirstGesture() {
+      // Khởi tạo AudioContext sau tương tác đầu tiên (chính sách trình duyệt)
+      const once = () => {
+        initAudio();
+        document.removeEventListener('click', once);
+        document.removeEventListener('keydown', once);
+      };
+      document.addEventListener('click', once, { once: true });
+      document.addEventListener('keydown', once, { once: true });
+    }
+    
+    async function bootstrap() {
+      console.log('%c[Cờ Vua Cao Cấp] Khởi động phiên bản cao cấp 4K...', 'color:#64748b');
+      
+      initThemeAndPrefs();
+      initAudioOnFirstGesture();
+      initializeBoardCoords();
+      
+      // Firebase
+      const fbReady = initFirebase();
+      
+      // Render UI ban đầu
+      renderNavProfile();
+      renderMenuUserStats();
+      
+      // Khôi phục một số setting
+      if (localStorage.getItem('chess_board_theme')) {
+        currentBoardTheme = localStorage.getItem('chess_board_theme');
+      }
+      
+      // Demo: Nếu chưa đăng nhập, vẫn cho phép chơi AI & Local
+      // Hiển thị gợi ý đăng nhập sau vài giây nếu ở menu
+      setTimeout(() => {
+        if (!currentUser && document.getElementById('view-menu') && !document.getElementById('view-menu').classList.contains('hidden')) {
+          // Có thể hiện nhẹ nhàng toast
+        }
+      }, 6500);
+      
+      // Phím tắt
+      document.addEventListener('keydown', (e) => {
+        if (e.key === '/' && document.getElementById('view-game').classList.contains('hidden') === false) {
+          const chat = document.getElementById('chat-input');
+          if (chat) {
+            e.preventDefault();
+            switchGameSidebarTab('chat');
+            chat.focus();
+          }
+        }
+        if (e.key.toLowerCase() === 'r' && e.metaKey && replayChess) {
+          e.preventDefault();
+          replayLast();
+        }
+      });
+      
+      // Khởi tạo âm thanh sớm (nếu có tương tác)
+      initAudio();
+      
+      // Mặc định hiển thị menu
+      switchView('menu');
+      
+      // Nếu có Firebase sẵn, có thể tự động đăng nhập ẩn (nhưng đã có onAuthStateChanged)
+      
+      // Hoàn tất
+      console.log('%c[Cờ Vua Cao Cấp] Sẵn sàng. Tất cả tính năng đã được khởi tạo.', 'color:#64748b');
+    }
+    
+    // Khởi chạy
+    window.addEventListener('load', bootstrap);
+    
+    // Expose một số hàm debug (tùy chọn)
+    window.ChessElite = {
+      getCurrentChess: () => chess,
+      forceEndGame: () => { if (gameActive) finishGame('1/2-1/2', null, 'Debug'); },
+      showLeaderboardDebug: () => loadLeaderboard(true)
+    };
+  </script>
+</body>
+</html>
